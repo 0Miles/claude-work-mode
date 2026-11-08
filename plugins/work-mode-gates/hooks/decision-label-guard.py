@@ -59,18 +59,53 @@ TRADEOFF = re.compile(r"[\[【]\s*(" + _alt(TRADEOFFS) + r")\s*[\]】]", re.I)
 # The heading must be the whole line: optional markdown (#, **), an optional count in brackets,
 # then either the end of the line or a colon with an inline remainder ("**待你決定**：沒有").
 # "## Decisions needed for the architecture" is an ordinary heading, not this section.
-# Natural Chinese variants of the heading: 要你決定的、要你決定的兩件事、待你決定的事項、要你決定的地方.
-_ZH_SUFFIX = r"(?:的(?:[一二兩三四五六七八九十\d]+\s*[件項個點]?)?(?:事情|事項|事|地方|問題|項目)?)?"
-_TAIL = r"\s*(?:\*\*)?\s*(?:[（(][^()（）\n]{0,20}[)）])?\s*(?:\*\*)?\s*(?:[：:].*)?$"
-HEADING = re.compile(r"^\s*(#+\s*|\*\*)?\s*(" + HEADINGS + _extra + r")" + _ZH_SUFFIX + _TAIL, re.I)
+_TAIL = r"\s*(?:\*\*)?\s*(?:[（(][^()（）\n]{0,40}[)）])?\s*(?:\*\*)?\s*(?:[：:].*)?$"
+HEADING = re.compile(r"^\s*(#+\s*|\*\*)?\s*(" + HEADINGS + _extra + r")" + _TAIL, re.I)
+# Chinese headings come in too many word orders to list (要你決定的兩件事, 需要你決定 3 件事,
+# 要你決定的有三件). A short heading line counts when it holds a decide phrase and every other
+# character is filler (的, 有, a count, 件/項/事...), so 「待你決定的背景」 stays an ordinary heading.
+_ZH_DECIDE = re.compile(r"(?:需要|要|請|待|由)?\s*(?:你|您)\s*(?:來)?\s*(?:做)?\s*決定|待決(?:事項)?")
+_ZH_FILLER = set("的有共還這些以下下列如需要請事項件個點條處地方問題情目一二兩三四五六七八九十0123456789 \t")
+_ZH_COUNT = re.compile(r"[\d一二兩三四五六七八九十]+\s*[件項個點條]")
+_ZH_LINE = re.compile(
+    r"^\s*(?:#+\s*|\*\*)?\s*(?P<core>[^：:*（(\n]{1,24}?)\s*(?:\*\*)?\s*"
+    r"(?:[（(][^()（）\n]{0,40}[)）])?\s*(?:\*\*)?\s*(?:[：:].*)?$")
+
+
+def is_heading(line: str) -> bool:
+    if HEADING.match(line):
+        return True
+    m = _ZH_LINE.match(line)
+    if not m:
+        return False
+    core = m.group("core")
+    d = _ZH_DECIDE.search(core)
+    if not d:
+        return False
+    rest = core[:d.start()] + core[d.end():]
+    if all(c in _ZH_FILLER for c in rest):
+        return True
+    # with a count ("待你決定的 2 條教訓") a short noun may follow it
+    c = _ZH_COUNT.search(rest)
+    return bool(c) and all(ch in _ZH_FILLER for ch in rest[:c.end()]) and len(rest[c.end():].strip()) <= 6
+
+
 ITEM = re.compile(r"^(\d+[.)、]|[-*])\s+\S")
 NONE = re.compile(r"^(沒有|無|none)\b|沒有要你決定|沒有待決|no\s+pending\s+decisions?|nothing\s+pending|^nothing\b", re.I)
-# A list item that only says nothing is pending ("- No work is pending.", "- 沒有", "- 無").
+# A list item whose WHOLE statement says nothing is pending ("- No work is pending.", "- 沒有", "- 無").
+# "- 無法判斷，請你決定是否付款" starts with 無 but is a real item, so the match is anchored at the end.
 EMPTY_ITEM = re.compile(
-    r"^(\d+[.)、]|[-*])\s+(沒有|無|none\b|nothing\b|n/a\b|no\s+(work|items?|decisions?|open\s+items?|pending)\b"
-    r"|no\b[^.\n]{0,40}\b(pending|open|needed|to\s+decide)\b)",
+    r"^(?:\d+[.)、]|[-*])\s+(?:"
+    r"(?:(?:除了這項|除此之外|其他|另外)[，,]?\s*)?(?:目前|暫時|這輪|本輪)?(?:沒有|無)(?:任何|其他|別的|新的)?"
+    r"(?:要你(?:決定|裁決)|需要你?(?:決定|裁決)|待決|待你決定|還沒收|未完成)?(?:的)?(?:事情|事項|事|項目)?了?"
+    r"|其他沒有了|none|nothing(?:\s+(?:else\s+)?(?:pending|open|to\s+decide))?|n/a"
+    r"|no\b[^.,;:\n]{0,40}\b(?:pending|open|needed|to\s+decide)"
+    # the empty statement must be the whole first clause; a closing suggestion may follow
+    r")\s*(?:[。.！!，,](?:\s.*|[^\s].*)?)?\s*$",
     re.I,
 )
+# "待你決定：1 件。" / "Decisions needed: 2" — a count only; the items are the list below.
+COUNT_ONLY = re.compile(r"^[\d一二兩三四五六七八九十]+\s*(?:[件項個點條]|items?)?\s*(?:事|事項)?\s*[。.]?\s*(?:[（(][^()（）]*[)）])?\s*[。.]?$", re.I)
 BREAK = re.compile(r"^\s*(#+\s|\*\*[^*]+\*\*\s*$)")
 MERIT = re.compile(
     r"好處|優點|優勢|代價|缺點|風險|好在|勝在|省下|省去|換來|但會|不過會|只是會|但要|不過要|卻會|少了|失去"
@@ -96,15 +131,26 @@ def _items(msg: str) -> list:
     out = []
     i = 0
     while i < len(lines):
-        if not HEADING.match(lines[i]):
+        if not is_heading(lines[i]):
             i += 1
             continue
         head = lines[i]
         rest = re.sub(r"^[^：:]*[：:]", "", head, count=1) if re.search(r"[：:]", head) else ""
-        if NONE.search(rest.strip(" *")):
+        if NONE.search(rest.strip(" *")) or EMPTY_ITEM.match("- " + rest.strip(" *")):
             i += 1
             continue
         i += 1
+        if rest.strip(" *") and not COUNT_ONLY.match(rest.strip(" *")):
+            # "**有一件事要你決定：<the decision>**": the heading line is the item and the
+            # list under it explains that one decision
+            item = [rest.strip(" *")]
+            while i < len(lines) and not BREAK.match(lines[i]) and (
+                    not lines[i].strip() or lines[i][0].isspace() or ITEM.match(lines[i])):
+                if lines[i].strip():
+                    item.append(lines[i])
+                i += 1
+            out.append(item)
+            continue
         while i < len(lines):
             ln = lines[i]
             # any unindented non-item text (e.g. a "Sources:" line) closes the section
