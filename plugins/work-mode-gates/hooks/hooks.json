@@ -1,0 +1,26 @@
+{
+  "description": "PreToolUse and Stop gates for work-mode (auto ask->deny conversion and wrap decision label check)",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scratch-doc-guard.sh\"" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/git-safe-commit-gate.sh\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/decision-label-guard.py\"" }
+        ]
+      }
+    ]
+  }
+}

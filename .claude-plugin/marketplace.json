@@ -1,0 +1,17 @@
+{
+  "name": "claude-work-mode",
+  "owner": { "name": "Dustin Yuchen Teng" },
+  "description": "Session work modes for Claude Code: auto, out, wrap",
+  "plugins": [
+    {
+      "name": "work-mode",
+      "source": "./plugins/work-mode",
+      "description": "/work-mode auto | out | wrap | off, plus a delegation nudge"
+    },
+    {
+      "name": "work-mode-gates",
+      "source": "./plugins/work-mode-gates",
+      "description": "Optional PreToolUse and Stop gates that read the work-mode state"
+    }
+  ]
+}
