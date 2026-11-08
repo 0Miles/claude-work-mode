@@ -16,13 +16,13 @@
 ## 安裝
 
 ```
-/plugin install work-mode --marketplace <owner>/claude-work-mode
+/plugin install work-mode --marketplace danyuchn/claude-work-mode
 ```
 
 詢問是否加入 marketplace 時回 `y`，再選安裝範圍。選裝閘門：
 
 ```
-/plugin install work-mode-gates --marketplace <owner>/claude-work-mode
+/plugin install work-mode-gates --marketplace danyuchn/claude-work-mode
 ```
 
 需求：支援 function hooks 的 Claude Code（2.1.314 以後）。閘門需要 `bash`、`jq`、`git`、`python3`。

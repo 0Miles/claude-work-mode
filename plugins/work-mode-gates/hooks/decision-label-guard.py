@@ -68,11 +68,12 @@ _ZH_DECIDE = re.compile(r"(?:需要|要|請|待|由)?\s*(?:你|您)\s*(?:來)?\s
 _ZH_FILLER = set("的有共還這些以下下列如需要請事項件個點條處地方問題情目一二兩三四五六七八九十0123456789 \t")
 _ZH_COUNT = re.compile(r"[\d一二兩三四五六七八九十]+\s*[件項個點條]")
 _ZH_LINE = re.compile(
-    r"^\s*(?:#+\s*|\*\*)?\s*(?P<core>[^：:*（(\n]{1,24}?)\s*(?:\*\*)?\s*"
+    r"^\s*(?:#+\s*|\*\*)?\s*(?P<core>[^：:*（(。？！?!\n]{1,24}?)\s*(?:\*\*)?\s*"
     r"(?:[（(][^()（）\n]{0,40}[)）])?\s*(?:\*\*)?\s*(?:[：:].*)?$")
 
 
 def is_heading(line: str) -> bool:
+    line = line.strip()[:300]  # bounded, so the regexes stay linear on long or blank-heavy lines
     if HEADING.match(line):
         return True
     m = _ZH_LINE.match(line)
@@ -87,11 +88,10 @@ def is_heading(line: str) -> bool:
         return True
     # with a count ("待你決定的 2 條教訓") a short noun may follow it
     c = _ZH_COUNT.search(rest)
-    return bool(c) and all(ch in _ZH_FILLER for ch in rest[:c.end()]) and len(rest[c.end():].strip()) <= 6
+    return bool(c) and all(ch in _ZH_FILLER for ch in rest[:c.end()]) and len(rest[c.end():].strip()) <= 12
 
 
 ITEM = re.compile(r"^(\d+[.)、]|[-*])\s+\S")
-NONE = re.compile(r"^(沒有|無|none)\b|沒有要你決定|沒有待決|no\s+pending\s+decisions?|nothing\s+pending|^nothing\b", re.I)
 # A list item whose WHOLE statement says nothing is pending ("- No work is pending.", "- 沒有", "- 無").
 # "- 無法判斷，請你決定是否付款" starts with 無 but is a real item, so the match is anchored at the end.
 EMPTY_ITEM = re.compile(
@@ -105,7 +105,15 @@ EMPTY_ITEM = re.compile(
     re.I,
 )
 # "待你決定：1 件。" / "Decisions needed: 2" — a count only; the items are the list below.
-COUNT_ONLY = re.compile(r"^[\d一二兩三四五六七八九十]+\s*(?:[件項個點條]|items?)?\s*(?:事|事項)?\s*[。.]?\s*(?:[（(][^()（）]*[)）])?\s*[。.]?$", re.I)
+COUNT_ONLY = re.compile(r"^[\d一二兩三四五六七八九十]+\s*(?:[件項個點條]|items?)?\s*(?:事|事項)?\s*[。.]?\s*(?:[（(][^()（）]*[)）])?\s*[。.：:]?$", re.I)
+# a clause after the empty statement that asks something makes the item a real decision
+QUESTION = re.compile(r"[？?]|嗎|要不要|是否|還是|請確認|請你|should\b|whether\b", re.I)
+
+
+def is_empty(item: str) -> bool:
+    # only the first sentence counts: "目前沒有，是否要刪資料？" asks, "目前沒有。之後要不要…" does not
+    first = re.match(r"[^。.！!？?]*[。.！!？?]?", item).group(0)
+    return bool(EMPTY_ITEM.match(item)) and not QUESTION.search(first)
 BREAK = re.compile(r"^\s*(#+\s|\*\*[^*]+\*\*\s*$)")
 MERIT = re.compile(
     r"好處|優點|優勢|代價|缺點|風險|好在|勝在|省下|省去|換來|但會|不過會|只是會|但要|不過要|卻會|少了|失去"
@@ -136,27 +144,21 @@ def _items(msg: str) -> list:
             continue
         head = lines[i]
         rest = re.sub(r"^[^：:]*[：:]", "", head, count=1) if re.search(r"[：:]", head) else ""
-        if NONE.search(rest.strip(" *")) or EMPTY_ITEM.match("- " + rest.strip(" *")):
+        inline = rest.strip(" *")
+        if inline and is_empty("- " + inline):
             i += 1
             continue
         i += 1
-        if rest.strip(" *") and not COUNT_ONLY.match(rest.strip(" *")):
-            # "**有一件事要你決定：<the decision>**": the heading line is the item and the
-            # list under it explains that one decision
-            item = [rest.strip(" *")]
-            while i < len(lines) and not BREAK.match(lines[i]) and (
-                    not lines[i].strip() or lines[i][0].isspace() or ITEM.match(lines[i])):
-                if lines[i].strip():
-                    item.append(lines[i])
-                i += 1
-            out.append(item)
-            continue
+        if inline and not COUNT_ONLY.match(inline):
+            # "**要你決定**：<the decision>": the inline text is an item; every top-level
+            # bullet below is still checked as its own item, indented lines are its detail
+            out.append([inline])
         while i < len(lines):
             ln = lines[i]
             # any unindented non-item text (e.g. a "Sources:" line) closes the section
             if not ITEM.match(ln) and (BREAK.match(ln) or (ln.strip() and not ln[0].isspace())):
                 break
-            if ITEM.match(ln) and EMPTY_ITEM.match(ln):
+            if ITEM.match(ln) and is_empty(ln):
                 pass
             elif ITEM.match(ln):
                 out.append([ln])
