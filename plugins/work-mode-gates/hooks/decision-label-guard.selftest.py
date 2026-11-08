@@ -38,6 +38,11 @@ CASES = [
     ("en unlabeled item blocks", "**Decisions Needed**\n- Should I restart the server?\n", 1),
     ("en none inline passes", "**Decisions Needed**: none.\n", 0),
     ("en pending heading none", "## Pending Decisions\nNo pending decisions.\n", 0),
+    ("en heading that is only a prefix is not the section", "## Decisions needed for the architecture\n- We chose SQLite\n- Caching stays\n", 0),
+    ("zh heading with more words is not the section", "## 待你決定的背景\n- 說明一\n", 0),
+    ("heading with count and colon inside bold", "**待你決定（2 項）：**\n1. 沒標籤\n", 1),
+    ("bold heading with inline none inside bold", "**待你決定：沒有**\n", 0),
+    ("heading with trailing colon", "Decisions Needed:\n- restart the server?\n", 1),
     ("mixed: zh label under en heading passes", "**Decisions Needed**\n1. [權限] share the folder\n", 0),
 ]
 TRADE = [
