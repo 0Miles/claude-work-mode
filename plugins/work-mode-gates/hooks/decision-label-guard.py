@@ -59,10 +59,18 @@ TRADEOFF = re.compile(r"[\[【]\s*(" + _alt(TRADEOFFS) + r")\s*[\]】]", re.I)
 # The heading must be the whole line: optional markdown (#, **), an optional count in brackets,
 # then either the end of the line or a colon with an inline remainder ("**待你決定**：沒有").
 # "## Decisions needed for the architecture" is an ordinary heading, not this section.
+# Natural Chinese variants of the heading: 要你決定的、要你決定的兩件事、待你決定的事項、要你決定的地方.
+_ZH_SUFFIX = r"(?:的(?:[一二兩三四五六七八九十\d]+\s*[件項個點]?)?(?:事情|事項|事|地方|問題|項目)?)?"
 _TAIL = r"\s*(?:\*\*)?\s*(?:[（(][^()（）\n]{0,20}[)）])?\s*(?:\*\*)?\s*(?:[：:].*)?$"
-HEADING = re.compile(r"^\s*(#+\s*|\*\*)?\s*(" + HEADINGS + _extra + r")" + _TAIL, re.I)
+HEADING = re.compile(r"^\s*(#+\s*|\*\*)?\s*(" + HEADINGS + _extra + r")" + _ZH_SUFFIX + _TAIL, re.I)
 ITEM = re.compile(r"^(\d+[.)、]|[-*])\s+\S")
 NONE = re.compile(r"^(沒有|無|none)\b|沒有要你決定|沒有待決|no\s+pending\s+decisions?|nothing\s+pending|^nothing\b", re.I)
+# A list item that only says nothing is pending ("- No work is pending.", "- 沒有", "- 無").
+EMPTY_ITEM = re.compile(
+    r"^(\d+[.)、]|[-*])\s+(沒有|無|none\b|nothing\b|n/a\b|no\s+(work|items?|decisions?|open\s+items?|pending)\b"
+    r"|no\b[^.\n]{0,40}\b(pending|open|needed|to\s+decide)\b)",
+    re.I,
+)
 BREAK = re.compile(r"^\s*(#+\s|\*\*[^*]+\*\*\s*$)")
 MERIT = re.compile(
     r"好處|優點|優勢|代價|缺點|風險|好在|勝在|省下|省去|換來|但會|不過會|只是會|但要|不過要|卻會|少了|失去"
@@ -102,7 +110,9 @@ def _items(msg: str) -> list:
             # any unindented non-item text (e.g. a "Sources:" line) closes the section
             if not ITEM.match(ln) and (BREAK.match(ln) or (ln.strip() and not ln[0].isspace())):
                 break
-            if ITEM.match(ln):
+            if ITEM.match(ln) and EMPTY_ITEM.match(ln):
+                pass
+            elif ITEM.match(ln):
                 out.append([ln])
             elif out and ln.strip():
                 out[-1].append(ln)

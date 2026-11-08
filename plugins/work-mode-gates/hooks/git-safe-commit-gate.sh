@@ -28,20 +28,31 @@ import os, shlex, subprocess
 
 cmd, cwd = os.environ["GATE_CMD"], os.environ["GATE_CWD"]
 try:
-    lex = shlex.shlex(cmd, posix=True, punctuation_chars=";&|()")
+    lex = shlex.shlex(cmd, posix=True, punctuation_chars=";&|()<>\n")
+    lex.whitespace = " \t\r"
     lex.whitespace_split = True
     tokens = list(lex)
 except ValueError:
     raise SystemExit(0)
 
+SEP = set(";&|()\n")
 segments, cur = [], []
-for t in tokens:
-    if t and all(c in ";&|()" for c in t):
+k = 0
+while k < len(tokens):
+    t = tokens[k]
+    if t and any(c in "<>" for c in t) and all(c in "<>&|" for c in t):
+        # a redirection: drop it, its target word, and an fd number glued before it ("2>&1")
+        if cur and cur[-1].isdigit():
+            cur.pop()
+        k += 2
+        continue
+    if t and all(c in SEP for c in t):
         if cur:
             segments.append(cur)
         cur = []
     else:
         cur.append(t)
+    k += 1
 if cur:
     segments.append(cur)
 
@@ -50,9 +61,10 @@ GLOBAL_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-p
 # git commit options that take a value as the next word
 COMMIT_VALUE = {"-m", "--message", "-F", "--file", "-C", "--reuse-message", "-c", "--reedit-message",
                 "--author", "--date", "-t", "--template", "--cleanup", "--fixup", "--squash",
-                "--trailer", "--pathspec-from-file"}
+                "--trailer"}
 ADD_SKIP_LONG = {"--patch", "--interactive", "--edit", "--all", "--update", "--no-ignore-removal",
-                 "--dry-run", "--pathspec-from-file"}
+                 "--dry-run"}
+FROM_FILE = "--pathspec-from-file"
 ADD_SKIP_SHORT = set("piAuen")
 
 
@@ -69,14 +81,18 @@ def is_env(word):
     return "=" in word and not word.startswith("-") and word.split("=", 1)[0].replace("_", "a").isalnum()
 
 
+base = cwd
 for seg in segments:
+    if seg[0] in ("cd", "pushd") and len(seg) > 1:
+        base = os.path.join(base, os.path.expanduser(seg[1]))
+        continue
     i = 0
     while i < len(seg) and (is_env(seg[i]) or seg[i] in ("command", "env", "sudo", "time", "nice")):
         i += 1
     if i >= len(seg) or os.path.basename(seg[i]) != "git":
         continue
     i += 1
-    repo = cwd
+    repo = base
     while i < len(seg) and seg[i].startswith("-"):
         opt = seg[i]
         if opt in GLOBAL_VALUE and i + 1 < len(seg):
@@ -94,6 +110,11 @@ for seg in segments:
             a = args[j]
             if after_dd:
                 paths.append(a)
+            elif a.split("=", 1)[0] == FROM_FILE:
+                # paths read from a file cannot be checked here: treat them as paths
+                paths.append("(" + a + ("" if "=" in a else " " + (args[j + 1] if j + 1 < len(args) else "")) + ")")
+                if "=" not in a:
+                    j += 1
             elif a == "--":
                 after_dd = True
             elif a in COMMIT_VALUE:
@@ -114,11 +135,16 @@ for seg in segments:
         opts = []
         paths = []
         after_dd = False
-        for a in args:
+        from_file = None
+        for n, a in enumerate(args):
             if after_dd or not a.startswith("-"):
+                if n > 0 and args[n - 1] == FROM_FILE:
+                    continue
                 paths.append(a)
             elif a == "--":
                 after_dd = True
+            elif a.split("=", 1)[0] == FROM_FILE:
+                from_file = a.split("=", 1)[1] if "=" in a else (args[n + 1] if n + 1 < len(args) else "")
             else:
                 opts.append(a)
         if any(o.split("=", 1)[0] in ADD_SKIP_LONG for o in opts if o.startswith("--")):
@@ -127,6 +153,19 @@ for seg in segments:
             continue
         if any(p in (".", ":/", ":") for p in paths):
             continue
+        if from_file is not None:
+            # the paths live in a file (or stdin): read them when possible, else treat the add as unknown
+            listed = None
+            try:
+                if from_file not in ("", "-"):
+                    with open(os.path.join(repo, os.path.expanduser(from_file)), encoding="utf-8") as fh:
+                        listed = [l.strip() for l in fh if l.strip()]
+            except OSError:
+                listed = None
+            if listed is None:
+                print("add\t(paths from " + (from_file or "stdin") + ")")
+                continue
+            paths.extend(listed)
         for p in paths:
             if modified(repo, p):
                 print("add\t" + p)

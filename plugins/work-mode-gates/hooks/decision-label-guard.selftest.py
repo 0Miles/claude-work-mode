@@ -43,6 +43,13 @@ CASES = [
     ("heading with count and colon inside bold", "**待你決定（2 項）：**\n1. 沒標籤\n", 1),
     ("bold heading with inline none inside bold", "**待你決定：沒有**\n", 0),
     ("heading with trailing colon", "Decisions Needed:\n- restart the server?\n", 1),
+    ("natural zh heading 要你決定的兩件事 is checked", "**要你決定的兩件事**\n1. 重開伺服器\n2. [對外] 寄信\n", 1),
+    ("natural zh heading 要你決定的 is checked", "## 要你決定的\n- 換版面\n", 1),
+    ("natural zh heading 要你決定的地方 labeled passes", "**要你決定的地方**\n- [權限] 開分享\n", 0),
+    ("en empty-state item passes", "## Decisions Needed\n- No work is pending.\n", 0),
+    ("en none item passes", "## Decisions Needed\n- None.\n", 0),
+    ("zh empty-state item passes", "**待你決定**\n- 沒有\n", 0),
+    ("en item starting with No but asking blocks", "## Decisions Needed\n- Notify the client now?\n", 1),
     ("mixed: zh label under en heading passes", "**Decisions Needed**\n1. [權限] share the folder\n", 0),
 ]
 TRADE = [

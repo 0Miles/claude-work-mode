@@ -202,7 +202,6 @@ const WORDS: Record<string, TempoMode> = {
   out: 'dispatch', dispatch: 'dispatch',
   wrap: 'converge', converge: 'converge',
 }
-const isWord = (w: string) => w === 'off' || w in WORDS
 
 /** `/work-mode auto out`, `/work-mode wrap auto`, `/work-mode off`, or nothing for status. */
 export function parseTempo(arg: string): TempoParse {
@@ -238,17 +237,18 @@ export function pickerLabels(current: readonly TempoMode[], cfg: WorkModeConfig 
 }
 
 /** A multi-select answer (comma-joined labels, or typed Other text) -> /work-mode words. */
-export function pickedArgs(answer: string): string {
+export function pickedArgs(answer: string, cfg: WorkModeConfig = getConfig()): string {
+  // Only an actual picker label (either language) is cut to its leading word; typed text stays whole
+  // so parseTempo still rejects what it does not know ("auto nonsense" is an error, not "auto").
+  const labels = new Set([
+    ...pickerLabels(['autonomous'], { ...cfg, locale: 'en' }),
+    ...pickerLabels(['autonomous'], { ...cfg, locale: 'zh-TW' }),
+  ])
   return answer
     .split(',')
     .map(a => a.trim())
     .filter(Boolean)
-    .map(a => {
-      const tokens = a.toLowerCase().split(/\s+/)
-      // Typed text made only of mode words ("auto out") stays whole; a label keeps its leading word.
-      if (tokens.every(isWord)) return a
-      return tokens[0] !== undefined && isWord(tokens[0]) ? tokens[0] : a
-    })
+    .map(a => (labels.has(a) ? (a.split(/\s+/)[0] ?? a) : a))
     .join(' ')
 }
 
@@ -382,7 +382,7 @@ export function registerTempo(on: On): void {
           header: 'Work mode',
           multiSelect: true,
         })
-        parsed = parseTempo(pickedArgs(answer))
+        parsed = parseTempo(pickedArgs(answer, cfg))
       } catch (err) {
         // Dismissed, or nobody to ask: fall through to the plain status line.
         $.ui.log(`tempo picker unavailable: ${String(err).slice(0, 300)}`, { to: 'debug' })
