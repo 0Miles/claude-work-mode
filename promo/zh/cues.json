@@ -1,0 +1,25 @@
+{
+  "kind": "cues.v1",
+  "total": 60.0,
+  "cues": {
+    "scene_pain_auto": { "start": 0.0, "end": 10.0 },
+    "scene_pain_auto.1": { "start": 0.0, "end": 10.0, "text": "用 Claude Code 最累：一直停下來問" },
+    "scene_pain_auto.2": { "start": 1.0, "end": 10.0, "text": "模型反覆對話詢問示範" },
+    "scene_auto": { "start": 10.0, "end": 20.0 },
+    "scene_auto.1": { "start": 10.3, "end": 20.0, "text": "auto 模式：本機可回復，不再對話打斷" },
+    "scene_auto.2": { "start": 11.0, "end": 20.0, "text": "本機可回復步驟放手做" },
+    "scene_out": { "start": 20.0, "end": 30.0 },
+    "scene_out.1": { "start": 20.3, "end": 30.0, "text": "out 模式：大批工作外派，省下主額度" },
+    "scene_out.2": { "start": 21.0, "end": 30.0, "text": "外派背景子代理省額度" },
+    "scene_pain_wrap": { "start": 30.0, "end": 40.0 },
+    "scene_pain_wrap.1": { "start": 30.3, "end": 40.0, "text": "準備收工時：模型開始旁生枝節" },
+    "scene_pain_wrap.2": { "start": 31.0, "end": 40.0, "text": "收尾時發散開新話題示範" },
+    "scene_wrap": { "start": 40.0, "end": 50.0 },
+    "scene_wrap.1": { "start": 40.3, "end": 50.0, "text": "wrap 模式：拒絕旁生枝節，聚焦決策" },
+    "scene_wrap.2": { "start": 41.0, "end": 50.0, "text": "聚焦待你決定清單" },
+    "scene_all": { "start": 50.0, "end": 60.0 },
+    "scene_all.1": { "start": 50.3, "end": 60.0, "text": "一個指令，隨時掌握 AI 工作節奏" },
+    "scene_all.2": { "start": 51.0, "end": 60.0, "text": "三種模式自由組合" },
+    "scene_all.3": { "start": 54.0, "end": 60.0, "text": "自主與專注程度" }
+  }
+}

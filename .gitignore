@@ -2,3 +2,9 @@
 plugins/*/.claude-plugin/types/
 __pycache__/
 .DS_Store
+
+# Promo video build artifacts and heavy masters (> 2MB)
+promo/**/project/
+promo/audio/
+promo/*.raw.mp4
+promo/*-promo-*.mp4

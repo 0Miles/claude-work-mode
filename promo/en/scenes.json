@@ -1,0 +1,178 @@
+{
+  "kind": "scenes.v1",
+  "format": "landscape",
+  "theme": "",
+  "scenes": [
+    {
+      "id": "scene_pain_auto",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_pain_auto.1",
+          "props": {
+            "text": "Tired of Claude Code {a:interrupting every step?}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_pain_auto.2",
+          "props": {
+            "title": "Claude Code (default)",
+            "lines": [
+              "> Update the navigation bar across all 12 pages",
+              "Claude: Found 12 files. Should I update index first or all of them?",
+              "> All of them. Please don't ask every step!",
+              "Claude: Updated 3 files. But what about the submenu? How should I proceed?",
+              "{a:! You say \"do it autonomously\", yet it halts to ask every few minutes}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_auto",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_auto.1",
+          "props": {
+            "text": "auto mode: {a:full local autonomy}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_auto.2",
+          "props": {
+            "title": "Claude Code [AUTO]",
+            "lines": [
+              "> /work-mode auto",
+              "> Update the navigation bar across all 12 pages",
+              "[auto] All 12 pages updated, submenus adapted automatically.",
+              "[auto] Tests passed. Reversible local steps done without chit-chat!",
+              "{a:Work flows freely! Only real risks (payments, deletes) ask}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_out",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_out.1",
+          "props": {
+            "text": "out mode: {a:delegate batch tasks & save quota}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_out.2",
+          "props": {
+            "title": "Claude Code [OUT]",
+            "lines": [
+              "> /work-mode out",
+              "> Classify and summarize these 1,000 user feedback items",
+              "[out] Heavy batch detected: delegated to background workers",
+              "Main thread only verifies results, saving 20%+ weekly Claude quota!",
+              "{a:No more grinding batch tasks in the main chat or draining quota}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_pain_wrap",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_pain_wrap.1",
+          "props": {
+            "text": "Trying to wrap up? {a:AI opens endless new tangents}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_pain_wrap.2",
+          "props": {
+            "title": "Claude Code (default)",
+            "lines": [
+              "> Ready to wrap up, status report please",
+              "Claude: Updated 12 pages. By the way, test coverage is low...",
+              "Claude: Should we refactor the CSS too? Plus 3 suggestions...",
+              "> I just need to know what decisions require my sign-off!",
+              "{a:! It tangents into new topics, burying the decisions you need to make}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_wrap",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_wrap.1",
+          "props": {
+            "text": "wrap mode: {a:stop tangents and converge on decisions}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_wrap.2",
+          "props": {
+            "title": "Claude Code [WRAP]",
+            "lines": [
+              "> /work-mode wrap",
+              "> Ready to wrap up, status report",
+              "[wrap] Active tasks converged. No new tangents or random proposals.",
+              "{a:【Decisions Needed】}",
+              "1. [Outbound] Send project report? -> Rec: Yes, draft ready",
+              "2. [Payment] Confirm plan upgrade?  -> Rec: Plan A",
+              "{a:Only what you must decide, so you can finish work in peace}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_all",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_all.1",
+          "props": {
+            "text": "One command to {a:shape AI to your working tempo}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_all.2",
+          "props": {
+            "title": "Claude Code",
+            "lines": [
+              "> /work-mode auto out wrap",
+              "[Modes Active: AUTO + OUT + WRAP]",
+              "  auto -> Zero conversational interruptions on local work",
+              "  out  -> Offload batch jobs to background subagents",
+              "  wrap -> Stop tangents, strictly converge on decisions"
+            ]
+          }
+        },
+        {
+          "part": "gate",
+          "cue": "scene_all.3",
+          "props": {
+            "text": "Control AI autonomy, delegation, and focus with one simple slash command"
+          }
+        }
+      ]
+    }
+  ]
+}

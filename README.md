@@ -13,6 +13,13 @@ Session work modes for [Claude Code](https://claude.com/claude-code), switched w
 
 Modes are per session, combine freely (`/work-mode auto wrap`), and `wrap` wins over `out` when both are typed. A bare `/work-mode` opens a multi-select picker. The mode text reaches the model once (with the next tool result or prompt) and again only after a compaction or resume, so it does not bloat every turn.
 
+## Demo (60s Walkthrough)
+
+[![Claude Work Mode Demo](promo/demo-poster-en.png)](promo/claude-work-mode-demo-en.mp4)
+
+> [!TIP]
+> Click the preview above to play the 60-second walkthrough video demonstrating behavioral changes across all three modes.
+
 ## Install
 
 ```

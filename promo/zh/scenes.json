@@ -1,0 +1,178 @@
+{
+  "kind": "scenes.v1",
+  "format": "landscape",
+  "theme": "",
+  "scenes": [
+    {
+      "id": "scene_pain_auto",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_pain_auto.1",
+          "props": {
+            "text": "用 Claude Code 最累：{a:一直停下來問}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_pain_auto.2",
+          "props": {
+            "title": "Claude Code (default)",
+            "lines": [
+              "> 請幫我更新全部 12 個頁面的導航列",
+              "Claude: 我看完了 12 個檔案。請問要先改首頁還是全部改？",
+              "> 全部改，中間不用過問我",
+              "Claude: 改好 3 個了。但次選單要保留嗎？接下來該怎麼做？",
+              "{a:! 「不用過問我」說了幾十次，模型還是每步停下來問}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_auto",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_auto.1",
+          "props": {
+            "text": "auto 模式：{a:本機可回復，不再對話打斷}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_auto.2",
+          "props": {
+            "title": "Claude Code [AUTO]",
+            "lines": [
+              "> /work-mode auto",
+              "> 請幫我更新全部 12 個頁面的導航列",
+              "[auto] 12 個頁面全數更新完畢，自動適配次選單。",
+              "[auto] 測試全數通過。本機可回復步驟零對話打擾！",
+              "{a:放手去做！真正具風險的事（金流、刪除、發信）才停下確認}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_out",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_out.1",
+          "props": {
+            "text": "out 模式：{a:大批工作外派，省下主額度}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_out.2",
+          "props": {
+            "title": "Claude Code [OUT]",
+            "lines": [
+              "> /work-mode out",
+              "> 幫我逐條分類這 1,000 筆用戶回饋",
+              "[out] 偵測到大批次工作，自動外派給背景子代理 / 外部模型",
+              "主線僅負責抽樣驗收，為你省下 20%+ 昂貴 Claude 週額度！",
+              "{a:不再讓繁重批次工作塞爆主對話、吃光額度}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_pain_wrap",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_pain_wrap.1",
+          "props": {
+            "text": "準備收工時：{a:模型開始旁生枝節}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_pain_wrap.2",
+          "props": {
+            "title": "Claude Code (default)",
+            "lines": [
+              "> 準備收工，彙整今天進度",
+              "Claude: 今天改了 12 個頁面。對了，我發現測試覆蓋率偏低...",
+              "Claude: 要順便重構 CSS 嗎？另外還有 3 個建議提醒你...",
+              "> 我只要知道現在需要我拍板的事情！",
+              "{a:! 越想收工越收不了，模型不斷開新話題，重要決策全被淹沒}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_wrap",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_wrap.1",
+          "props": {
+            "text": "wrap 模式：{a:拒絕旁生枝節，聚焦決策}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_wrap.2",
+          "props": {
+            "title": "Claude Code [WRAP]",
+            "lines": [
+              "> /work-mode wrap",
+              "> 準備收工，彙整今天進度",
+              "[wrap] 手頭任務已收斂，不開新分支、不提無關建議。",
+              "{a:【待你決定】}",
+              "1. [對外] 寄出成果報告？ -> 建議：是，草稿已備妥",
+              "2. [金流] 升級方案確認？ -> 建議：採方案 A",
+              "{a:只列出你必須拍板的事項，讓你安心下班}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scene_all",
+      "parts": [
+        {
+          "part": "hero-text",
+          "cue": "scene_all.1",
+          "props": {
+            "text": "一個指令，{a:隨時掌握 AI 工作節奏}",
+            "size": "compact"
+          }
+        },
+        {
+          "part": "terminal",
+          "cue": "scene_all.2",
+          "props": {
+            "title": "Claude Code",
+            "lines": [
+              "> /work-mode auto out wrap",
+              "[Modes Active: AUTO + OUT + WRAP]",
+              "  auto -> 本機步驟放手做，零對話中斷",
+              "  out  -> 批次任務外派背景，省主額度",
+              "  wrap -> 拒絕發散，結尾只列拍板事項"
+            ]
+          }
+        },
+        {
+          "part": "gate",
+          "cue": "scene_all.3",
+          "props": {
+            "text": "不改變你的習慣，只改變 AI 的自主與專注程度"
+          }
+        }
+      ]
+    }
+  ]
+}

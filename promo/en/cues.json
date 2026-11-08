@@ -1,0 +1,25 @@
+{
+  "kind": "cues.v1",
+  "total": 60.0,
+  "cues": {
+    "scene_pain_auto": { "start": 0.0, "end": 10.0 },
+    "scene_pain_auto.1": { "start": 0.0, "end": 10.0, "text": "Tired of Claude Code interrupting every step?" },
+    "scene_pain_auto.2": { "start": 1.0, "end": 10.0, "text": "Model interrupting constantly" },
+    "scene_auto": { "start": 10.0, "end": 20.0 },
+    "scene_auto.1": { "start": 10.3, "end": 20.0, "text": "auto mode: full local autonomy" },
+    "scene_auto.2": { "start": 11.0, "end": 20.0, "text": "Hands-off local autonomy" },
+    "scene_out": { "start": 20.0, "end": 30.0 },
+    "scene_out.1": { "start": 20.3, "end": 30.0, "text": "out mode: delegate batch tasks & save quota" },
+    "scene_out.2": { "start": 21.0, "end": 30.0, "text": "Batch delegation saves quota" },
+    "scene_pain_wrap": { "start": 30.0, "end": 40.0 },
+    "scene_pain_wrap.1": { "start": 30.3, "end": 40.0, "text": "Trying to wrap up? AI opens endless new tangents" },
+    "scene_pain_wrap.2": { "start": 31.0, "end": 40.0, "text": "Tangent branching on wrap up" },
+    "scene_wrap": { "start": 40.0, "end": 50.0 },
+    "scene_wrap.1": { "start": 40.3, "end": 50.0, "text": "wrap mode: stop tangents and converge on decisions" },
+    "scene_wrap.2": { "start": 41.0, "end": 50.0, "text": "Convergence to decision items" },
+    "scene_all": { "start": 50.0, "end": 60.0 },
+    "scene_all.1": { "start": 50.3, "end": 60.0, "text": "One command to shape AI to your working tempo" },
+    "scene_all.2": { "start": 51.0, "end": 60.0, "text": "Active modes combination" },
+    "scene_all.3": { "start": 54.0, "end": 60.0, "text": "Control AI autonomy" }
+  }
+}

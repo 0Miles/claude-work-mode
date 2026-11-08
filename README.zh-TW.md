@@ -13,6 +13,13 @@
 
 模式只對當前 session 有效，可以任意組合（`/work-mode auto wrap`）；`out` 和 `wrap` 同時打時 `wrap` 優先。只打 `/work-mode` 會跳出可複選的選單。模式說明只送給模型一次（跟著下一個工具結果或下一則訊息），壓縮或 resume 之後才再送，不會每回合都塞進上下文。
 
+## 示範影片（60 秒快速導覽）
+
+[![Claude Work Mode 示範影片](promo/demo-poster-zh.png)](promo/claude-work-mode-demo-zh.mp4)
+
+> [!TIP]
+> 點擊上方預覽圖即可播放 60 秒完整操作示範影片，包含三種模式的行為改變與痛點對照。
+
 ## 安裝
 
 ```
