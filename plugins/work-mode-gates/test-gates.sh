@@ -67,6 +67,17 @@ expect "add shared file asks" ask "$(decision git-safe-commit-gate.sh "$(bash_in
 expect "add shared file denies under auto" deny "$(decision git-safe-commit-gate.sh "$(bash_in 'git add shared.txt' sid-on)")"
 expect "add clean file passes" none "$(decision git-safe-commit-gate.sh "$(bash_in 'git add clean.txt' sid-on)")"
 expect "add -p passes" none "$(decision git-safe-commit-gate.sh "$(bash_in 'git add -p shared.txt' sid-off)")"
+# Every command an auto deny tells the model to run must get past this gate; otherwise the
+# model is denied again and falls back to a bulk add that sweeps in more.
+for c in "printf 'y\nn\n' | git add -p -- shared.txt" "printf 'a\n' | git add -p -- shared.txt"; do
+  expect "suggested route passes under auto: $c" none "$(decision git-safe-commit-gate.sh "$(bash_in "$c" sid-on)")"
+done
+for c in 'git add shared.txt' 'git commit -m "x" -- shared.txt'; do
+  r=$(reason git-safe-commit-gate.sh "$(bash_in "$c" sid-on)")
+  expect "auto deny pipes answers into git add -p ($c)" 1 "$(grep -cF '| git add -p -- <file>' <<<"$r")"
+  expect "auto deny warns off bulk adds ($c)" 1 "$(grep -cF 'git commit -a' <<<"$r")"
+  expect "auto deny never offers a plain git add <file> ($c)" 0 "$(grep -cF 'or git add <file> when' <<<"$r")"
+done
 expect "add -A passes" none "$(decision git-safe-commit-gate.sh "$(bash_in 'git add -A' sid-off)")"
 expect "unrelated bash passes" none "$(decision git-safe-commit-gate.sh "$(bash_in 'ls -la' sid-on)")"
 

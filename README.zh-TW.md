@@ -41,7 +41,7 @@
 | 閘門 | 事件 | 平常 | `auto` 下 |
 | --- | --- | --- | --- |
 | `scratch-doc-guard.sh` | PreToolUse `Write` | 新建 `SUMMARY*/REPORT*/NOTES*/FINDINGS*/ANALYSIS*.md` 前先問 | 拒絕：改寫進既有文件、放暫存資料夾，或直接寫在回覆裡 |
-| `git-safe-commit-gate.sh` | PreToolUse `Bash` | `git commit` 帶路徑（不論有沒有 `--`），或 `git add <檔>...` 而某檔原本就有未 stage 的修改時先問 | 拒絕：改用 `git add -p`，再用不帶路徑的 `git commit` |
+| `git-safe-commit-gate.sh` | PreToolUse `Bash` | `git commit` 帶路徑（不論有沒有 `--`），或 `git add <檔>...` 而某檔原本就有未 stage 的修改時先問 | 拒絕：用管線把答案餵給 `git add -p`（例如 `printf 'y\nn\n' \| git add -p -- <檔>`），再用不帶路徑的 `git commit` |
 | `decision-label-guard.py` | Stop | 回覆的待決區塊裡有沒標類別的項目，或「取捨」項目沒講兩邊各自得失，就擋下 | 相同 |
 
 自己寫的閘門也可以引用 `tempo-auto.sh`。真正的硬停（憑證、force push、部署）不要接它，任何模式下都該問。

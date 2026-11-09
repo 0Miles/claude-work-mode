@@ -41,7 +41,7 @@ The modes are written to `~/.claude/state/tempo/<session_id>` so shell hooks can
 | Gate | Event | Normally | Under `auto` |
 | --- | --- | --- | --- |
 | `scratch-doc-guard.sh` | PreToolUse `Write` | asks before creating a new `SUMMARY*/REPORT*/NOTES*/FINDINGS*/ANALYSIS*.md` | denies: update the existing doc, use a scratch dir, or answer in the reply |
-| `git-safe-commit-gate.sh` | PreToolUse `Bash` | asks on `git commit` with paths (with or without `--`) and on `git add <file>...` when a file already had unstaged edits | denies: use `git add -p`, then a plain `git commit` |
+| `git-safe-commit-gate.sh` | PreToolUse `Bash` | asks on `git commit` with paths (with or without `--`) and on `git add <file>...` when a file already had unstaged edits | denies: pipe the answers into `git add -p` (e.g. `printf 'y\nn\n' \| git add -p -- <file>`), then a plain `git commit` |
 | `decision-label-guard.py` | Stop | blocks a reply whose decisions section holds an unlabeled item, or a tradeoff item that does not state what each side gains | same |
 
 Use `tempo-auto.sh` in your own gates for anything you want converted. Keep real hard stops (secrets, force pushes, deploys) out of it: they should ask in every mode.

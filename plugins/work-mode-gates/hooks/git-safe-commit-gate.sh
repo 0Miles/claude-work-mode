@@ -4,7 +4,8 @@
 #   git add <file>...           on a file that already had unstaged changes stages all of them
 # Either one can swallow a parallel session's (or the user's) unfinished edits.
 # Normally this asks; under /work-mode auto it denies with the standard alternative
-# (git add -p, then a plain git commit) so the model carries on without asking.
+# (git add -p fed its answers through a pipe, then a plain git commit) so the model
+# carries on without asking.
 # Bulk adds (-A, --all, -u, .) and interactive ones (-p, -i, -e) are left alone: they are explicit.
 # The command line is parsed with python3's shlex (quotes, `git -C dir`, `&&`/`;` chains);
 # without python3 the gate stays out of the way.
@@ -182,14 +183,20 @@ decide() {  # decide <tag> <auto-reason> <ask-reason>
 COMMIT_PATHS=$(printf '%s\n' "$FOUND" | awk -F'\t' '$1=="commit"{print $2}' | paste -sd' ' -)
 ADD_PATHS=$(printf '%s\n' "$FOUND" | awk -F'\t' '$1=="add"{print $2}' | paste -sd' ' -)
 
+# The how-to in an auto deny must name only commands this gate lets through, or the model is
+# denied again and falls back to a bulk add. A plain `git add <file>` on a modified file is
+# denied here whoever made the edits, so the only per-file route is git add -p, and the
+# model's shell has no terminal: answers are piped, one line per hunk.
+HOW_TO="Review the changes with git diff -- <file>, then stage only your own hunks. git add -p has no terminal here, so pipe one answer per hunk in order (y stages, n skips), e.g. printf 'y\nn\n' | git add -p -- <file>; when every hunk is yours, printf 'a\n' | git add -p -- <file> stages them all. A plain git add <file> is denied again by this gate, and git add -A, git add ., git add -u or git commit -a stage the same edits and more, so do not switch to them. Check git diff --cached, then commit with a plain git commit -m ... and no paths."
+
 if [ -n "$COMMIT_PATHS" ]; then
   decide git-commit-pathspec \
-    "git commit with paths ($COMMIT_PATHS) commits their whole working-tree content and can sweep in edits that are not yours. Do not stop to ask: stage only your own hunks with git add -p <file> (or git add <file> when every change in it is yours), check git diff --cached, then commit with a plain git commit -m ... and no paths." \
+    "git commit with paths ($COMMIT_PATHS) commits their whole working-tree content and can sweep in edits that are not yours. Do not stop to ask. $HOW_TO" \
     "git commit with paths ($COMMIT_PATHS) commits the WORKING-TREE content of those paths (like git add + commit), not only what is staged, so it can sweep in a parallel session's or the user's unstaged edits. To commit what is staged, drop the paths; to pick your own changes, use git add -p first."
 fi
 if [ -n "$ADD_PATHS" ]; then
   decide git-add-shared-file \
-    "$ADD_PATHS already had unstaged changes before this add; git add would stage all of them, including edits that may not be yours. Do not stop to ask: use git add -p on those files to stage only your own hunks, check git diff --cached, then commit. If you cannot tell which hunks are yours, put the file on the pending list and continue with the rest." \
+    "$ADD_PATHS has unstaged changes, and git add <file> would stage all of them; this gate cannot tell which of them are yours. Do not stop to ask. $HOW_TO If you cannot tell which hunks are yours, put the file on the pending list and continue with the rest." \
     "$ADD_PATHS already shows unstaged modifications; they may belong to a parallel session or the user. git add <file> stages the ENTIRE working-tree content. Use git add -p to pick hunks, or confirm you mean to stage all of it."
 fi
 exit 0
