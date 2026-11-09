@@ -2,15 +2,13 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { DEFAULT_CONFIG_EN, DEFAULT_CONFIG_ZH, localeFrom, resolveConfig, resolvePath } from './config'
-import { nudgeText, observe, resetNudge, responseLength } from './nudge'
 import {
   autonomousText,
   convergeText,
-  dispatchText,
+  knownModes,
   parseTempo,
   pickedArgs,
   pickerLabels,
-  poolLine,
   switchReply,
   switchTexts,
   tempoLabel,
@@ -78,15 +76,6 @@ const CUSTOM = {
   userName: 'Alice',
   pronouns: 'she',
   autonomous: { extraRules: ['Always run the linter before committing.'] },
-  dispatch: {
-    pickerHint: 'custom-cli, fast',
-    instructions: ['[tempo: dispatch] Use custom-cli for batches.', 'Keep judgement inline.'],
-    commandPattern: '(^|\\s)custom-cli\\s',
-    nudgeThresholdChars: 100,
-    nudgeTemplate: '[dispatch-nudge] {chars} chars read; try custom-cli.',
-    quotaFile: '~/quota.json',
-    poolRouting: { bothBlocked: 'BOTH-BLOCKED', agyBlocked: 'AGY-BLOCKED', codexBlocked: 'CODEX-BLOCKED', bothOpen: 'BOTH-OPEN' },
-  },
   converge: {
     sectionHeading: 'Open Questions',
     decisionLabels: ['external', 'money', 'choice'],
@@ -102,17 +91,17 @@ test('A: no config file, English: neutral texts end to end', async ($, on) => {
   await start($)
   const before = await $.classic.UserPromptSubmit({ prompt: 'hi', session_id: 'sid-1' } as never)
   expect(before.additionalContext).toBe(undefined)
-  const r = await switched($, 'auto out')
-  expect(r.text).toContain('auto + out')
+  const r = await switched($, 'auto')
+  expect(r.text).toContain('Work mode auto:')
   expect(r.text).toContain('compatible PreToolUse gates deny')
-  expect(r.text).toContain('subagents / external CLI')
-  expect(r.context?.[0]).toBe('[tempo] The user switched work mode just now: auto + out is on from this point.')
+  expect(r.context?.[0]).toBe('[tempo] The user switched work mode just now: auto is on from this point.')
   expect(r.context).toContain(autonomousText(DEFAULT_CONFIG_EN))
-  expect(r.context).toContain(dispatchText(DEFAULT_CONFIG_EN))
-  expect(JSON.parse(written[STATE] ?? '{}')).toEqual({ modes: ['autonomous', 'dispatch'] })
-  expect(statuses.at(-1)).toBe('AUTO + OUT')
-  const w = await switched($, 'wrap')
+  expect(JSON.parse(written[STATE] ?? '{}')).toEqual({ modes: ['autonomous'] })
+  expect(statuses.at(-1)).toBe('AUTO')
+  const w = await switched($, 'wrap auto')
   expect(w.context).toContain(convergeText(DEFAULT_CONFIG_EN))
+  expect(w.context?.includes(autonomousText(DEFAULT_CONFIG_EN))).toBe(false) // already in context
+  expect(statuses.at(-1)).toBe('AUTO + WRAP')
   const off = await switched($, 'off')
   expect(off.context?.[0]).toContain('The user turned work mode off')
   expect(STATE in written).toBe(false)
@@ -120,17 +109,24 @@ test('A: no config file, English: neutral texts end to end', async ($, on) => {
   expectNeutral([r.text, w.text, off.text, ...(r.context ?? []), ...(w.context ?? []), ...(off.context ?? [])])
 })
 
+test('A: out is gone: /work-mode out is an unknown mode and changes nothing', async ($, on) => {
+  world(on)
+  await start($)
+  const r = await switched($, 'out')
+  expect(r.text).toContain('Unknown mode "out".')
+  expect(r.context).toBe(undefined)
+  expect(STATE in written).toBe(false)
+})
+
 test('A: default texts in both locales carry nothing personal', () => {
   for (const cfg of [DEFAULT_CONFIG_EN, DEFAULT_CONFIG_ZH]) {
     expectNeutral([
       autonomousText(cfg),
-      dispatchText(cfg),
       convergeText(cfg),
-      nudgeText(25000, cfg),
-      switchReply(['autonomous', 'dispatch'], undefined, cfg),
-      switchReply(['converge'], undefined, cfg),
-      ...switchTexts(['dispatch'], ['autonomous', 'converge'], false, undefined, cfg),
-      ...switchTexts(['dispatch'], [], true, undefined, cfg),
+      switchReply(['autonomous', 'converge']),
+      switchReply(['converge']),
+      ...switchTexts(['converge'], ['autonomous'], false, cfg),
+      ...switchTexts(['converge'], [], true, cfg),
       ...pickerLabels(['autonomous'], cfg),
     ])
   }
@@ -146,8 +142,6 @@ test('A: default texts in both locales carry nothing personal', () => {
   expect(convergeText(DEFAULT_CONFIG_ZH)).toContain('"待你決定" section')
   expect(convergeText(DEFAULT_CONFIG_ZH)).toContain('A 的好處')
   expect(convergeText(DEFAULT_CONFIG_ZH)).toContain('台灣用語')
-  expect(nudgeText(25000, DEFAULT_CONFIG_ZH)).toContain('約 25000 字元')
-  expect(nudgeText(25000, DEFAULT_CONFIG_EN)).toContain('about 25000 characters')
 })
 
 test('A: Claude Code language setting picks Traditional Chinese even with an English LANG', async ($, on) => {
@@ -172,73 +166,28 @@ test('A: with no language setting, a zh LANG picks Traditional Chinese', async (
   expect((await switched($, 'wrap')).context).toContain(convergeText(DEFAULT_CONFIG_ZH))
 })
 
-test('A: no quota file configured: out sends no pool line', async ($, on) => {
-  world(on, { files: { '/home/u/.claude/usage-cache/ai-quota.json': '[{"pool":"agy","gemini_5h_used":5}]' } })
-  await start($)
-  const r = await switched($, 'out')
-  expect((r.context ?? []).some(t => t.startsWith('[tempo: pools]'))).toBe(false)
-})
-
-test('A: nudge fires once at the default threshold only with out on; delegation keeps it quiet', async ($, on) => {
+test('A: a subagent tool call does not take the switch notice meant for the main thread', async ($, on) => {
   world(on)
   await start($)
-  await $.classic.UserPromptSubmit({ prompt: 'go', session_id: 'sid-1' } as never)
-  const post = (extra: object, n: number, input: object = {}, tool = 'Read') =>
-    $.classic.PostToolUse({ tool_name: tool, tool_input: input, tool_response: 'x'.repeat(n), tool_use_id: 't', ...extra } as never)
-  expect((await post({}, 50000)).additionalContext).toBe(undefined) // off: never nudges
-  await $.command.run(run('out'))
-  await $.classic.UserPromptSubmit({ prompt: 'go', session_id: 'sid-1' } as never)
-  expect((await post({ agent_id: 'sub1' }, 50000)).additionalContext).toBe(undefined)
-  const hit = await post({}, 25000)
-  expect(hit.additionalContext?.[0]).toContain('[dispatch-nudge]')
-  expectNeutral(hit.additionalContext ?? [])
-  expect((await post({}, 25000)).additionalContext).toBe(undefined)
-  await $.classic.UserPromptSubmit({ prompt: 'next', session_id: 'sid-1' } as never)
-  expect((await post({}, 1, { command: 'codex exec --sandbox read-only review' }, 'Bash')).additionalContext).toBe(undefined)
-  expect((await post({}, 90000)).additionalContext).toBe(undefined)
-})
-
-test('A: nudge counting and the default delegation pattern', () => {
-  resetNudge()
-  expect(observe('Read', {}, 'x'.repeat(15000), 20000, DEFAULT_CONFIG_EN)).toBe(undefined)
-  expect(observe('Edit', {}, 'x'.repeat(50000), 20000, DEFAULT_CONFIG_EN)).toBe(undefined)
-  const text = observe('Bash', { command: 'ls' }, { stdout: 'y'.repeat(6000) }, 20000, DEFAULT_CONFIG_EN)
-  expect(text).toBe(nudgeText(responseLength({ stdout: 'y'.repeat(6000) }) + 15000, DEFAULT_CONFIG_EN))
-  for (const cmd of ['gemini -p "x" ', 'claude -p --model sonnet "x"', 'cd a && codex exec foo']) {
-    resetNudge()
-    expect(observe('Bash', { command: cmd }, 'a', 20000, DEFAULT_CONFIG_EN)).toBe(undefined)
-    expect(observe('Read', {}, 'x'.repeat(90000), 20000, DEFAULT_CONFIG_EN)).toBe(undefined)
-  }
-  resetNudge()
-  expect(observe('Agent', {}, 'a', 20000, DEFAULT_CONFIG_EN)).toBe(undefined)
-  expect(observe('Read', {}, 'x'.repeat(90000), 20000, DEFAULT_CONFIG_EN)).toBe(undefined)
-  resetNudge()
-  expect(observe('Bash', { command: 'echo geminid' }, 'a', 20000, DEFAULT_CONFIG_EN)).toBe(undefined)
-  expect(observe('Read', {}, 'x'.repeat(25000), 20000, DEFAULT_CONFIG_EN)).toBeDefined()
+  await $.command.run(run('auto'))
+  const sub = await $.classic.PostToolUse({ tool_name: 'Read', tool_input: {}, tool_response: '', tool_use_id: 't', agent_id: 'sub1' } as never)
+  expect(sub.additionalContext).toBe(undefined)
+  const main = await $.classic.PostToolUse({ tool_name: 'Read', tool_input: {}, tool_response: '', tool_use_id: 't' } as never)
+  expect(main.additionalContext).toContain(autonomousText(DEFAULT_CONFIG_EN))
 })
 
 // ---- group B: custom config ------------------------------------------------------------
 
-test('B: every override reaches the texts, the reply and the pool line', async ($, on) => {
-  const quota = JSON.stringify([
-    { pool: 'agy', gemini_5h_used: 7, gemini_7d_used: 3, route: 'floor_7d', route_used: 94, route_reset_ts: 9e12, route_reset_in: '1h' },
-    { pool: 'codex', '5h_used': 10, '7d_used': 20, route: 'open' },
-  ])
-  world(on, { files: { [CFG_PATH]: JSON.stringify(CUSTOM), '/home/u/quota.json': quota } })
+test('B: every override reaches the texts and the reply', async ($, on) => {
+  world(on, { files: { [CFG_PATH]: JSON.stringify(CUSTOM) } })
   await start($)
-  const r = await switched($, 'auto out')
-  expect(r.context?.[0]).toBe('[tempo] Alice switched work mode just now: auto + out is on from this point.')
-  expect(r.text).toContain('The delegation reminder (custom-cli, fast)')
-  const ctx = r.context ?? []
-  expect(ctx).toContain('[tempo: dispatch] Use custom-cli for batches.\nKeep judgement inline.')
-  const auto = ctx.find(t => t.startsWith('[tempo: autonomous]')) ?? ''
+  const r = await switched($, 'auto')
+  expect(r.context?.[0]).toBe('[tempo] Alice switched work mode just now: auto is on from this point.')
+  const auto = (r.context ?? []).find(t => t.startsWith('[tempo: autonomous]')) ?? ''
   expect(auto).toContain('Alice has granted full autonomy')
   expect(auto).toContain('Always run the linter before committing.')
   expect(auto).toContain('so she is interrupted once')
   expect(auto).toContain('do not wait for her')
-  const pools = ctx[ctx.indexOf('[tempo: dispatch] Use custom-cli for batches.\nKeep judgement inline.') + 1]
-  expect(pools).toContain('[tempo: pools] agy 5h 7% 7d 3% (refused: 7d window 94%, resets in 1h)')
-  expect(pools).toContain('AGY-BLOCKED')
   const wrap = await switched($, 'wrap')
   const conv = (wrap.context ?? []).find(t => t.startsWith('[tempo: converge]')) ?? ''
   expect(conv).toContain('"Open Questions" section')
@@ -246,20 +195,6 @@ test('B: every override reaches the texts, the reply and the pool line', async (
   expect(conv).toContain('[choice] is not a catch-all')
   expect(conv).toContain('turns on her preference')
   expect(conv).toContain('run /close-session yourself without asking')
-})
-
-test('B: custom nudge pattern, threshold and template', async ($, on) => {
-  world(on, { files: { [CFG_PATH]: JSON.stringify(CUSTOM) } })
-  await start($)
-  await $.command.run(run('out'))
-  await $.classic.UserPromptSubmit({ prompt: 'go', session_id: 'sid-1' } as never)
-  const post = (n: number, input: object = {}, tool = 'Read') =>
-    $.classic.PostToolUse({ tool_name: tool, tool_input: input, tool_response: 'x'.repeat(n), tool_use_id: 't' } as never)
-  const hit = await post(150)
-  expect(hit.additionalContext?.at(-1)).toBe('[dispatch-nudge] 150 chars read; try custom-cli.')
-  await $.classic.UserPromptSubmit({ prompt: 'next', session_id: 'sid-1' } as never)
-  expect((await post(1, { command: 'custom-cli run x' }, 'Bash')).additionalContext).toBe(undefined)
-  expect((await post(500)).additionalContext).toBe(undefined)
 })
 
 test('B: WORK_MODE_CONFIG with ~ points at another file; removing it resets to defaults', async ($, on) => {
@@ -272,12 +207,11 @@ test('B: WORK_MODE_CONFIG with ~ points at another file; removing it resets to d
   expect((await switched($, 'wrap')).context?.[0]).toContain('The user switched')
 })
 
-test('B: malformed fields fall back one by one; a broken regex keeps the default', () => {
-  const cfg = resolveConfig({ userName: 7, pronouns: 'xe', dispatch: { commandPattern: '(', nudgeThresholdChars: -1 }, converge: { decisionLabels: [] } })
+test('B: malformed fields fall back one by one; an old dispatch section is ignored', () => {
+  const cfg = resolveConfig({ userName: 7, pronouns: 'xe', dispatch: { pickerHint: 'x' }, converge: { decisionLabels: [] } })
   expect(cfg.userName).toBe('the user')
   expect(cfg.pronouns).toBe('they')
-  expect(cfg.dispatch.commandPattern).toBe(DEFAULT_CONFIG_EN.dispatch.commandPattern)
-  expect(cfg.dispatch.nudgeThresholdChars).toBe(20000)
+  expect('dispatch' in cfg).toBe(false)
   expect(cfg.converge.decisionLabels).toEqual(DEFAULT_CONFIG_EN.converge.decisionLabels)
   expect(resolveConfig('not an object', 'zh-TW').converge.sectionHeading).toBe('待你決定')
   expect(resolvePath('~/a/b', '/h')).toBe('/h/a/b')
@@ -288,31 +222,33 @@ test('B: malformed fields fall back one by one; a broken regex keeps the default
 
 test('tempo arguments and labels', () => {
   expect(parseTempo('')).toEqual({ kind: 'status' })
-  expect(parseTempo(' Dispatch ')).toEqual({ kind: 'set', modes: ['dispatch'] })
-  expect(parseTempo('autonomous+dispatch')).toEqual({ kind: 'set', modes: ['autonomous', 'dispatch'] })
+  expect(parseTempo(' Converge ')).toEqual({ kind: 'set', modes: ['converge'] })
+  expect(parseTempo('autonomous+converge')).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
   expect(parseTempo('wrap auto')).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
-  expect(parseTempo('wrap out')).toMatchObject({ kind: 'set', modes: ['converge'] })
   expect(parseTempo('off')).toEqual({ kind: 'set', modes: [] })
+  expect(parseTempo('out').kind).toBe('error')
+  expect(parseTempo('dispatch').kind).toBe('error')
   expect(parseTempo('fast').kind).toBe('error')
   expect(tempoLabel([])).toBe(undefined)
-  expect(tempoLabel(['autonomous', 'dispatch'])).toBe('AUTO + OUT')
+  expect(tempoLabel(['autonomous', 'converge'])).toBe('AUTO + WRAP')
+  expect(knownModes(['dispatch', 'converge', 'autonomous'])).toEqual(['autonomous', 'converge'])
 })
 
-test('picker: labels in both locales, commas in the hint never split an answer', () => {
+test('picker: labels in both locales map back to modes', () => {
   const cfg = resolveConfig(CUSTOM)
   const en = pickerLabels(['autonomous'], cfg)
-  expect(en.length).toBe(4)
-  expect(en[1]).toBe('out - delegate (custom-cli/ fast)')
-  expect(pickerLabels([], cfg).length).toBe(3)
-  expect(parseTempo(pickedArgs(en.join(', '), cfg))).toMatchObject({ kind: 'set', modes: ['autonomous', 'converge'] })
-  expect(parseTempo(pickedArgs(`${en[1]}, ${en[0]}`, cfg))).toEqual({ kind: 'set', modes: ['autonomous', 'dispatch'] })
+  expect(en.length).toBe(3)
+  expect(en[2]).toBe('off - turn off')
+  expect(pickerLabels([], cfg).length).toBe(2)
+  expect(parseTempo(pickedArgs(en.join(', '), cfg))).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
+  expect(parseTempo(pickedArgs(`${en[1]}, ${en[0]}`, cfg))).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
   const zcfg = resolveConfig({ ...CUSTOM, locale: 'zh-TW' })
-  const zh = pickerLabels(['dispatch'], zcfg)
-  expect(zh[1]).toBe('out 外派（custom-cli／ fast）')
-  expect(parseTempo(pickedArgs(`${zh[3]}`, zcfg))).toEqual({ kind: 'set', modes: [] })
-  expect(parseTempo(pickedArgs(`${zh[0]}, ${zh[2]}`, zcfg))).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
-  expect(pickedArgs('auto out')).toBe('auto out')
-  expect(parseTempo(pickedArgs('out + auto'))).toEqual({ kind: 'set', modes: ['autonomous', 'dispatch'] })
+  const zh = pickerLabels(['converge'], zcfg)
+  expect(zh[1]).toBe('wrap 收斂（不開新方向）')
+  expect(parseTempo(pickedArgs(`${zh[2]}`, zcfg))).toEqual({ kind: 'set', modes: [] })
+  expect(parseTempo(pickedArgs(`${zh[0]}, ${zh[1]}`, zcfg))).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
+  expect(pickedArgs('auto wrap')).toBe('auto wrap')
+  expect(parseTempo(pickedArgs('wrap + auto'))).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
   expect(parseTempo(pickedArgs('auto nonsense')).kind).toBe('error')
   expect(parseTempo(pickedArgs('something else')).kind).toBe('error')
 })
@@ -332,17 +268,4 @@ test('mode texts go out once, then again after a compaction or /clear turns them
   expect(statuses.at(-1)).toBe(undefined)
   expect(STATE in written).toBe(false)
   expect((await $.command.run(run(''))).text).toContain('Work mode: off')
-})
-
-test('pool line: routing sentences come from config, defaults name no private tool', () => {
-  const now = 1_000_000
-  const q = (agy: object, codex: object) =>
-    JSON.stringify([{ pool: 'agy', gemini_5h_used: 7, gemini_7d_used: 3, ...agy }, { pool: 'codex', '5h_used': 97, '7d_used': 15, ...codex }])
-  const floor = (route: string) => ({ route, route_used: 97, route_reset_ts: now + 99, route_reset_in: '0h45m' })
-  expect(poolLine(q({ route: 'open' }, { route: 'open' }), now, DEFAULT_CONFIG_EN)).toContain('Both are open')
-  expect(poolLine(q(floor('floor_5h'), floor('floor_7d')), now, DEFAULT_CONFIG_EN)).toContain('background subagent')
-  expect(poolLine(q({ route: 'open' }, floor('floor_5h')), now, resolveConfig(CUSTOM))).toContain('CODEX-BLOCKED')
-  expect(poolLine(q({ ...floor('floor_7d'), route_reset_ts: now - 1 }, { route: 'open' }), now, resolveConfig(CUSTOM))).toContain('BOTH-OPEN')
-  expect(poolLine('not json')).toBe(undefined)
-  expect(poolLine(JSON.stringify([{ pool: 'agy' }]))).toBe(undefined)
 })

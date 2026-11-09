@@ -7,11 +7,10 @@
 | 模式 | 模型會被告知什麼 |
 | --- | --- |
 | `auto` | 本機、可回復的步驟（改檔、本地 commit、跑測試）不中途停下來問。真正要你點頭的事（對外發訊、安裝套件、碰憑證、刪掉救不回的資料、金流、改權限、動正式環境）記進待決清單，做完一次回報；會跳確認視窗的指令留到最後一口氣跑完，你只被打斷一次。 |
-| `out` | 能用檢查器或抽查驗收的批次工作（抽取、分類、摘要、審查）派給背景子代理或外部 CLI，主線只驗收。主線一個回合讀進大量原始內容卻沒外派時，會提醒一次。 |
 | `wrap` | 收斂：不開新方向，把手上的做完；只列新增或狀態有變的待決事項，每項帶類別標籤與建議。 |
 | `off` | 回到平常。 |
 
-模式只對當前 session 有效，可以任意組合（`/work-mode auto wrap`）；`out` 和 `wrap` 同時打時 `wrap` 優先。只打 `/work-mode` 會跳出可複選的選單。模式說明只送給模型一次（跟著下一個工具結果或下一則訊息），壓縮或 resume 之後才再送，不會每回合都塞進上下文。
+模式只對當前 session 有效，可以任意組合（`/work-mode auto wrap`）。只打 `/work-mode` 會跳出可複選的選單。模式說明只送給模型一次（跟著下一個工具結果或下一則訊息），壓縮或 resume 之後才再送，不會每回合都塞進上下文。
 
 ## 示範影片（60 秒快速導覽）
 
@@ -19,6 +18,7 @@
 
 > [!TIP]
 > 點擊上方預覽圖即可播放 60 秒完整操作示範影片，包含三種模式的行為改變與痛點對照。
+> 影片錄於這個 fork 移除 `out` 之前，片中 `out` 的部分已不適用。
 
 ## 安裝
 
@@ -58,21 +58,11 @@
 | `locale` | 自動偵測 | `en` 或 `zh-TW` |
 | `userName`／`pronouns` | `the user`／`they` | 模式說明怎麼稱呼你（`they`、`he`、`she`） |
 | `autonomous.extraRules` | `[]` | 加進 `auto` 說明的額外規則 |
-| `dispatch.pickerHint` | `背景子代理／外部 CLI` | 顯示在選單與切換回覆 |
-| `dispatch.instructions` | 內建 | 整段取代 `out` 說明，一行一條 |
-| `dispatch.commandPattern` | `codex exec`、`gemini`、`claude -p` | Bash 指令符合這個正規式就算已外派 |
-| `dispatch.nudgeThresholdChars` | `20000` | 讀進多少字元才提醒（環境變數 `DISPATCH_NUDGE_CHARS` 可覆寫） |
-| `dispatch.nudgeTemplate` | 內建 | 提醒文字，`{chars}` 會換成字元數 |
-| `dispatch.quotaFile`／`poolRouting` | 無 | 選用的額度表（見下） |
 | `converge.sectionHeading` | `待你決定`／`Decisions Needed` | 待決區塊標題 |
 | `converge.decisionLabels`／`tradeoffLabel` | `對外 金流 刪除 權限 取捨` | 每個待決項目開頭必須帶的標籤 |
 | `converge.autoCloseCommand` | `null` | 沒有未完成事項時模型自己跑的指令，例如收尾用的 skill |
 
-決策標籤閘門讀同一個設定檔的標題與標籤；沒有設定檔時中英兩組標籤都接受。
-
-### 依額度分流
-
-如果你有在追外部模型的用量，可以把 `dispatch.quotaFile` 指到一個 JSON 陣列（格式見英文版 README）。開 `out` 時模型會收到一行「哪個池子已經過底線、該改派哪裡」，用詞來自 `poolRouting`，額度表有變才會再送。
+決策標籤閘門讀同一個設定檔的標題與標籤；沒有設定檔時中英兩組標籤都接受。舊版留下的 `dispatch` 區塊（`out` 用的設定）會被忽略。
 
 ## 嵌進別的 mod
 

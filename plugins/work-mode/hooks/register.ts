@@ -1,9 +1,8 @@
 import type { Register } from 'claude-code'
 
-import { registerNudge, resetNudge } from './nudge'
 import { registerTempo, tempoClear, tempoContext, tempoResend, tempoStart } from './tempo'
 
-// /work-mode (auto, out, wrap) and the dispatch nudge.
+// /work-mode (auto, wrap).
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await tempoStart($)
@@ -27,11 +26,9 @@ export const register: Register = on => {
     const r = await next(e)
     // A blocked prompt never reaches the model: keep every notice pending for the retry.
     if (e.agent_id || r.block || r.preventContinuation) return r
-    resetNudge()
     const extra = await tempoContext($, e.session_id)
     return extra.length === 0 ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), ...extra] }
   })
 
   registerTempo(on)
-  registerNudge(on)
 }

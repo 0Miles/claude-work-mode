@@ -7,11 +7,10 @@ Session work modes for [Claude Code](https://claude.com/claude-code), switched w
 | Mode | What the model is told |
 | --- | --- |
 | `auto` | Do not stop to ask about internal, reversible steps (local files, local commits, tests). Hard stops (outgoing messages, installs, secrets, unrecoverable deletes, payments, permission changes, production changes) go to a pending list reported once at the end. Calls that will raise a confirmation prompt are run last, back to back. |
-| `out` | Delegate batch work a checker or spot check can verify (extraction, classification, summaries, reviews) to a background subagent or an external CLI; the main thread verifies. A one-time nudge fires when the main thread has read a lot of raw output in one turn without delegating. |
 | `wrap` | Converge: open no new branches, finish what is open, list only new or changed decisions, each with a label and a recommendation. |
 | `off` | Back to normal. |
 
-Modes are per session, combine freely (`/work-mode auto wrap`), and `wrap` wins over `out` when both are typed. A bare `/work-mode` opens a multi-select picker. The mode text reaches the model once (with the next tool result or prompt) and again only after a compaction or resume, so it does not bloat every turn.
+Modes are per session and combine freely (`/work-mode auto wrap`). A bare `/work-mode` opens a multi-select picker. The mode text reaches the model once (with the next tool result or prompt) and again only after a compaction or resume, so it does not bloat every turn.
 
 ## Demo (60s Walkthrough)
 
@@ -19,6 +18,7 @@ Modes are per session, combine freely (`/work-mode auto wrap`), and `wrap` wins 
 
 > [!TIP]
 > Click the preview above to play the 60-second walkthrough video demonstrating behavioral changes across all three modes.
+> It was recorded before this fork removed `out`; the `out` parts no longer apply.
 
 ## Install
 
@@ -58,23 +58,11 @@ To personalise, create `~/.config/work-mode/config.json` (or point `WORK_MODE_CO
 | `locale` | detected | `en` or `zh-TW` |
 | `userName` / `pronouns` | `the user` / `they` | how the mode texts refer to you (`they`, `he`, `she`) |
 | `autonomous.extraRules` | `[]` | extra lines for the `auto` text |
-| `dispatch.pickerHint` | `subagents / external CLI` | shown in the picker and the switch reply |
-| `dispatch.instructions` | built in | replaces the whole `out` text, one line per entry |
-| `dispatch.commandPattern` | `codex exec`, `gemini`, `claude -p` | a Bash command matching this regex counts as delegating |
-| `dispatch.nudgeThresholdChars` | `20000` | raw output read before the nudge fires (env `DISPATCH_NUDGE_CHARS` overrides) |
-| `dispatch.nudgeTemplate` | built in | nudge text; `{chars}` is filled in |
-| `dispatch.quotaFile` / `poolRouting` | none | optional quota table (see below) |
 | `converge.sectionHeading` | `Decisions Needed` / `待你決定` | heading for decision items |
 | `converge.decisionLabels` / `tradeoffLabel` | `outbound payment delete permission tradeoff` | labels each decision must start with |
 | `converge.autoCloseCommand` | `null` | a command the model runs on its own when nothing is open, e.g. a session-closing skill |
 
-The decision-label gate reads the same file for its heading and labels; without one it accepts both the English and the Chinese label sets.
-
-### Quota-aware routing
-
-If you track usage of external model pools, point `dispatch.quotaFile` at a JSON array like
-`[{"pool":"agy","gemini_5h_used":40,"gemini_7d_used":12,"route":"open"},{"pool":"codex","5h_used":97,"7d_used":15,"route":"floor_5h","route_used":97,"route_reset_ts":1767225600,"route_reset_in":"0h45m"}]`.
-With `out` on, the model then gets one line saying which pool is past its floor, worded by `poolRouting`, and it is repeated only when the table changes.
+The decision-label gate reads the same file for its heading and labels; without one it accepts both the English and the Chinese label sets. A `dispatch` section left over from a version with `out` is ignored.
 
 ## Embedding in another mod
 

@@ -7,25 +7,6 @@
       "Running the project's own migration script against the local dev database is yours to do: dry run first, then apply."
     ]
   },
-  "dispatch": {
-    "pickerHint": "subagents / codex",
-    "instructions": [
-      "[tempo: dispatch] Delegation mode is ON for this session; the user asked for it with /work-mode out.",
-      "Batch work that a checker or a spot check can verify goes to a background sonnet subagent (the Agent tool).",
-      "Testable code fixes and adversarial review go to `codex exec --sandbox read-only`.",
-      "Judgement only the main model can make, or work that is nearly done, stays inline."
-    ],
-    "commandPattern": "(^|[\\s;&|(/])(codex\\s+exec)\\s",
-    "nudgeThresholdChars": 20000,
-    "nudgeTemplate": "[dispatch-nudge] About {chars} characters of raw output read this turn and nothing delegated yet. Hand the rest of the batch to a subagent or codex if a spot check can verify it.",
-    "quotaFile": "~/.cache/my-quota.json",
-    "poolRouting": {
-      "bothBlocked": "Both pools are past the floor: keep batches in a sonnet subagent.",
-      "agyBlocked": "agy is past the floor: send batch work to codex instead.",
-      "codexBlocked": "codex is past the floor: send code review to a subagent instead.",
-      "bothOpen": "Both are open: route as above."
-    }
-  },
   "converge": {
     "sectionHeading": "Decisions Needed",
     "decisionLabels": ["outbound", "payment", "delete", "permission", "tradeoff"],

@@ -2,24 +2,21 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 
 import type { TempoMode } from '../types'
-import { DEFAULT_POOL_ROUTING, ensureConfig, getConfig, getHome, loadConfig, resolvePath } from './config'
+import { ensureConfig, getConfig, getHome, loadConfig } from './config'
 import type { WorkModeConfig } from './config'
 
-export { DEFAULT_PATTERN, ensureConfig, getConfig, loadConfig, resolveConfig } from './config'
+export { ensureConfig, getConfig, loadConfig, resolveConfig } from './config'
 export type { WorkModeConfig } from './config'
 
 // /work-mode: per-session working modes. State lives in $.state, so it never leaks to other sessions.
-// Typed as short words: auto, out, wrap (long internal names still accepted).
+// Typed as short words: auto, wrap (long internal names still accepted).
 // Any words, any order (`/work-mode wrap auto`); the result replaces the current modes.
-// out and wrap exclude each other: typed together, wrap wins (finishing beats opening new jobs).
 // PreToolUse gates are shell hooks and cannot read $.state, so the modes are also written
 // to ~/.claude/state/tempo/<session_id> (read by work-mode-gates' hooks/lib/tempo-auto.sh).
 const modes = atom({ plugin: 'work-mode', key: 'tempo' } as const, [] as TempoMode[])
 // Mode texts stay in context once sent, so each goes out once, and again on the next prompt only
 // after a compaction or a (re)start may have dropped it.
 const sent = atom({ plugin: 'work-mode', key: 'autoSent' } as const, false)
-// The pool line last handed over; out repeats it only when the quota table changed it.
-const poolsSent = atom({ plugin: 'work-mode', key: 'poolsSent' } as const, '')
 // What a /work-mode switch tells the model. A command's `context` does not reach the model
 // (2.1.314), so it waits here for the next tool result (mid-turn) or the next prompt.
 const pending = atom({ plugin: 'work-mode', key: 'pending' } as const, [] as string[])
@@ -34,11 +31,23 @@ export function setTempoStatusSink(fn: TempoStatusSink): void {
   statusSink = fn
 }
 
-/** Hands over what the last switch left for the model, once (also mid-turn, from PostToolUse in nudge.ts). */
+/** Hands over what the last switch left for the model, once (also mid-turn, from PostToolUse). */
 export async function takePending($: EngineInterface): Promise<string[]> {
   const out = await read($, pending)
   if (out.length > 0) await update($, pending, () => [])
   return out
+}
+
+const ORDER: TempoMode[] = ['autonomous', 'converge']
+export const SHORT: Record<TempoMode, string> = { autonomous: 'auto', converge: 'wrap' }
+
+/** The modes this version knows, in display order. A session saved by an older version may still hold "dispatch". */
+export function knownModes(list: readonly string[]): TempoMode[] {
+  return ORDER.filter(m => list.includes(m))
+}
+
+async function readModes($: EngineInterface): Promise<TempoMode[]> {
+  return knownModes(await read($, modes))
 }
 
 // ---- naming the person -----------------------------------------------------------------
@@ -56,16 +65,6 @@ export function words(cfg: WorkModeConfig): Words {
 const plain = (cfg: WorkModeConfig) => (cfg.locale === 'zh-TW' ? 'plain Traditional Chinese' : 'plain language')
 
 // ---- mode texts --------------------------------------------------------------------------
-
-export function dispatchText(cfg: WorkModeConfig = getConfig()): string {
-  if (cfg.dispatch.instructions) return cfg.dispatch.instructions.join('\n')
-  return [
-    '[tempo: dispatch] Delegation mode is ON for this session; the user asked for it with /work-mode out.',
-    'Batch work that can be verified by a checker or a spot check (fact checks, extraction, summaries, line-by-line classification) goes to a background subagent (the Agent tool, on a cheaper model such as sonnet or haiku) or to an external CLI that is installed here (for example `codex exec` or `gemini`).',
-    'Testable code fixes and adversarial review can go to a second model the same way; the main thread only verifies the results.',
-    'Judgement only the main model can make, or work that is nearly done, stays inline.',
-  ].join('\n')
-}
 
 export function convergeText(cfg: WorkModeConfig = getConfig()): string {
   const w = words(cfg)
@@ -104,70 +103,14 @@ export function autonomousText(cfg: WorkModeConfig = getConfig()): string {
 }
 
 export function modeText(m: TempoMode, cfg: WorkModeConfig = getConfig()): string {
-  return m === 'dispatch' ? dispatchText(cfg) : m === 'converge' ? convergeText(cfg) : autonomousText(cfg)
+  return m === 'converge' ? convergeText(cfg) : autonomousText(cfg)
 }
-
-/**
- * One routing line from an optional quota table, so out does not keep sending work to a refused pool.
- * The table is a JSON array of rows `{pool: "agy"|"codex", ...usage percents, route: "open"|"floor_5h"|"floor_7d", route_reset_ts}`.
- */
-export function poolLine(raw: string, now = Date.now() / 1000, cfg: WorkModeConfig = getConfig()): string | undefined {
-  let rows: Array<Record<string, unknown>>
-  try {
-    rows = JSON.parse(raw)
-  } catch {
-    return undefined
-  }
-  if (!Array.isArray(rows)) return undefined
-  const routing = cfg.dispatch.poolRouting ?? DEFAULT_POOL_ROUTING
-  const row = (pool: string) => rows.find(r => r?.pool === pool)
-  const num = (r: Record<string, unknown> | undefined, key: string) => {
-    const v = r?.[key]
-    return typeof v === 'number' ? v : undefined
-  }
-  const a = row('agy')
-  const c = row('codex')
-  const show = (v: number | undefined) => (v === undefined ? '?' : `${v}%`)
-  const win = (r: Record<string, unknown> | undefined, five: string, week: string) =>
-    `5h ${show(num(r, five))} 7d ${show(num(r, week))}`
-  if ([num(a, 'gemini_5h_used'), num(a, 'gemini_7d_used'), num(c, '5h_used'), num(c, '7d_used')].every(v => v === undefined)) return undefined
-  const blocked = (r: Record<string, unknown> | undefined) => {
-    const route = r?.route
-    if (typeof route !== 'string' || !route.startsWith('floor_')) return undefined
-    const reset = num(r, 'route_reset_ts')
-    if (reset !== undefined && reset < now) return undefined
-    return `${route.slice(6)} window ${show(num(r, 'route_used'))}, resets in ${r?.route_reset_in ?? '?'}`
-  }
-  const agyOut = blocked(a)
-  const codexOut = blocked(c)
-  const head = `[tempo: pools] agy ${win(a, 'gemini_5h_used', 'gemini_7d_used')}${agyOut ? ` (refused: ${agyOut})` : ''}; codex ${win(c, '5h_used', '7d_used')}${codexOut ? ` (refused: ${codexOut})` : ''}.`
-  if (agyOut && codexOut) return `${head} ${routing.bothBlocked}`
-  if (agyOut) return `${head} ${routing.agyBlocked}`
-  if (codexOut) return `${head} ${routing.codexBlocked}`
-  return `${head} ${routing.bothOpen}`
-}
-
-async function readPools($: EngineInterface): Promise<string | undefined> {
-  const cfg = getConfig()
-  if (!cfg.dispatch.quotaFile) return undefined
-  try {
-    const home = getHome() || ((await $.env.get('HOME')) ?? '')
-    return poolLine(await $.fs.read(resolvePath(cfg.dispatch.quotaFile, home)), Date.now() / 1000, cfg)
-  } catch {
-    // No table yet: the dispatch text alone.
-    return undefined
-  }
-}
-
-const ORDER: TempoMode[] = ['autonomous', 'dispatch', 'converge']
-export const SHORT: Record<TempoMode, string> = { autonomous: 'auto', dispatch: 'out', converge: 'wrap' }
 
 /** What the model reads the moment /work-mode switches: the new modes, and which ones stopped. */
 export function switchTexts(
   prev: readonly TempoMode[],
   next: readonly TempoMode[],
   prevSent: boolean,
-  pools?: string,
   cfg: WorkModeConfig = getConfig(),
 ): string[] {
   const w = words(cfg)
@@ -186,24 +129,22 @@ export function switchTexts(
   for (const m of next) {
     if (prevSent && prev.includes(m)) continue
     out.push(modeText(m, cfg))
-    if (m === 'dispatch' && pools !== undefined) out.push(pools)
   }
   return out
 }
 
 export type TempoParse =
   | { kind: 'status' }
-  | { kind: 'set'; modes: TempoMode[]; note?: string }
+  | { kind: 'set'; modes: TempoMode[] }
   | { kind: 'error'; message: string }
 
 /** Short words typed after /work-mode, mapped to the internal mode names the gate state file uses. */
 const WORDS: Record<string, TempoMode> = {
   auto: 'autonomous', autonomous: 'autonomous',
-  out: 'dispatch', dispatch: 'dispatch',
   wrap: 'converge', converge: 'converge',
 }
 
-/** `/work-mode auto out`, `/work-mode wrap auto`, `/work-mode off`, or nothing for status. */
+/** `/work-mode auto wrap`, `/work-mode wrap`, `/work-mode off`, or nothing for status. */
 export function parseTempo(arg: string): TempoParse {
   const list = arg.toLowerCase().split(/[\s,+]+/).filter(Boolean)
   if (list.length === 0) return { kind: 'status' }
@@ -215,25 +156,18 @@ export function parseTempo(arg: string): TempoParse {
     if (!mode) return { kind: 'error', message: `Unknown mode "${w}".` }
     picked.add(mode)
   }
-  let note: string | undefined
-  if (picked.has('converge') && picked.has('dispatch')) {
-    picked.delete('dispatch')
-    note = 'out dropped: wrap and out exclude each other, wrap wins (jobs already out still finish).'
-  }
-  const result = ORDER.filter(m => picked.has(m))
-  return note ? { kind: 'set', modes: result, note } : { kind: 'set', modes: result }
+  return { kind: 'set', modes: ORDER.filter(m => picked.has(m)) }
 }
 
 // The picker shown by a bare /work-mode is a multi-select: tick any mix, it replaces the
-// current modes. AskUserQuestion takes at most 4 labels; "off" shows only when something is on.
+// current modes. "off" shows only when something is on.
 // Labels never hold a half-width comma: the answer comes back comma-joined.
 export function pickerLabels(current: readonly TempoMode[], cfg: WorkModeConfig = getConfig()): string[] {
-  const zh = cfg.locale === 'zh-TW'
-  const hint = cfg.dispatch.pickerHint.replace(/,/g, zh ? '／' : '/')
-  const labels = zh
-    ? ['auto 自主（中途不問）', `out 外派（${hint}）`, 'wrap 收斂（不開新方向）', 'off 關閉']
-    : ['auto - autonomous (no mid-task questions)', `out - delegate (${hint})`, 'wrap - converge (no new branches)', 'off - turn off']
-  return current.length > 0 ? labels : labels.slice(0, 3)
+  const labels =
+    cfg.locale === 'zh-TW'
+      ? ['auto 自主（中途不問）', 'wrap 收斂（不開新方向）', 'off 關閉']
+      : ['auto - autonomous (no mid-task questions)', 'wrap - converge (no new branches)', 'off - turn off']
+  return current.length > 0 ? labels : labels.slice(0, 2)
 }
 
 /** A multi-select answer (comma-joined labels, or typed Other text) -> /work-mode words. */
@@ -253,21 +187,12 @@ export function pickedArgs(answer: string, cfg: WorkModeConfig = getConfig()): s
 }
 
 export function tempoLabel(m: readonly TempoMode[]): string | undefined {
-  const parts = [
-    m.includes('autonomous') ? 'AUTO' : '',
-    m.includes('dispatch') ? 'OUT' : '',
-    m.includes('converge') ? 'WRAP' : '',
-  ].filter(Boolean)
+  const parts = [m.includes('autonomous') ? 'AUTO' : '', m.includes('converge') ? 'WRAP' : ''].filter(Boolean)
   return parts.length ? parts.join(' + ') : undefined
 }
 
-/** True when /work-mode out is on; the dispatch nudge only speaks in that mode. */
-export async function dispatchOn($: EngineInterface): Promise<boolean> {
-  return (await read($, modes)).includes('dispatch')
-}
-
 async function refresh($: EngineInterface): Promise<void> {
-  $.ui.status(statusSink(tempoLabel(await read($, modes))))
+  $.ui.status(statusSink(tempoLabel(await readModes($))))
 }
 
 // Gate hooks read this file by session id. No modes means no file: it is removed, never left stale.
@@ -293,13 +218,13 @@ export async function tempoStart($: EngineInterface): Promise<void> {
   await loadConfig($)
   await $.command.register({
     name: 'work-mode',
-    description: 'Work mode: auto (no questions) | out (delegate) | wrap (converge) | off',
-    argumentHint: '[auto] [out|wrap] | off',
+    description: 'Work mode: auto (no questions) | wrap (converge) | off',
+    argumentHint: '[auto] [wrap] | off',
     immediate: true,
   })
   await update($, sent, () => false)
   await refresh($)
-  await writeState($, await $.session.id(), await read($, modes))
+  await writeState($, await $.session.id(), await readModes($))
 }
 
 /** /clear starts a fresh conversation: modes go off, and the status line is redrawn (session.start does not fire). */
@@ -320,7 +245,7 @@ export async function tempoResend($: EngineInterface): Promise<void> {
 /** Context handed to the model with this prompt: the mode texts only when they are not in context yet. */
 export async function tempoContext($: EngineInterface, sessionId: string): Promise<string[]> {
   await ensureConfig($)
-  const list = await read($, modes)
+  const list = await readModes($)
   await writeState($, sessionId, list)
   const queued = await takePending($)
   if (list.length === 0) return queued
@@ -328,40 +253,24 @@ export async function tempoContext($: EngineInterface, sessionId: string): Promi
 }
 
 async function modeTexts($: EngineInterface, list: readonly TempoMode[]): Promise<string[]> {
+  if (await read($, sent)) return []
+  await update($, sent, () => true)
   const cfg = getConfig()
-  const pools = list.includes('dispatch') ? await readPools($) : undefined
-  if (!(await read($, sent))) {
-    await update($, sent, () => true)
-    if (pools !== undefined) await update($, poolsSent, () => pools)
-    const out: string[] = []
-    for (const m of list) {
-      out.push(modeText(m, cfg))
-      if (m === 'dispatch' && pools !== undefined) out.push(pools)
-    }
-    return out
-  }
-  if (pools === undefined || pools === (await read($, poolsSent))) return []
-  await update($, poolsSent, () => pools)
-  return [pools]
+  return list.map(m => modeText(m, cfg))
 }
 
 /** The reply /work-mode prints after a switch. */
-export function switchReply(m: readonly TempoMode[], note: string | undefined, cfg: WorkModeConfig = getConfig()): string {
-  const tail = note ? ` (${note})` : ''
-  if (m.length === 0) return 'Work mode off: back to normal.' + tail
+export function switchReply(m: readonly TempoMode[]): string {
+  if (m.length === 0) return 'Work mode off: back to normal.'
   if (m.length === 1 && m[0] === 'converge')
-    return 'Work mode wrap: no new branches, replies show new decisions plus an open count. /work-mode off to stop.' + tail
+    return 'Work mode wrap: no new branches, replies show new decisions plus an open count. /work-mode off to stop.'
   return (
     `Work mode ${m.map(x => SHORT[x]).join(' + ')}: ` +
     (m.includes('autonomous')
       ? 'no mid-task questions on internal reversible steps; compatible PreToolUse gates deny with a how-to instead of asking; hard stops go to a pending list. '
       : '') +
-    (m.includes('dispatch')
-      ? `The delegation reminder (${cfg.dispatch.pickerHint}) reaches the model once, with its next tool result or prompt. `
-      : '') +
     (m.includes('converge') ? 'No new branches; replies end with decisions plus recommendations. ' : '') +
-    '/work-mode off to stop.' +
-    tail
+    '/work-mode off to stop.'
   )
 }
 
@@ -371,7 +280,7 @@ export function registerTempo(on: On): void {
     let parsed = parseTempo(e.args)
     if (parsed.kind === 'status') {
       try {
-        const current = await read($, modes)
+        const current = await readModes($)
         const label = tempoLabel(current) ?? 'off'
         const question =
           cfg.locale === 'zh-TW'
@@ -388,21 +297,27 @@ export function registerTempo(on: On): void {
         $.ui.log(`tempo picker unavailable: ${String(err).slice(0, 300)}`, { to: 'debug' })
       }
     }
-    const usage = 'Use /work-mode with any of auto, out, wrap (any order), or off.'
+    const usage = 'Use /work-mode with auto, wrap or both (any order), or off.'
     if (parsed.kind === 'error') return { text: `${parsed.message} ${usage}` }
     if (parsed.kind === 'status') {
-      const label = tempoLabel(await read($, modes)) ?? 'off'
+      const label = tempoLabel(await readModes($)) ?? 'off'
       return { text: `Work mode: ${label}. ${usage}` }
     }
-    const prev = await read($, modes)
+    const prev = await readModes($)
     const prevSent = await read($, sent)
-    const pools = parsed.modes.includes('dispatch') ? await readPools($) : undefined
-    await update($, pending, () => switchTexts(prev, parsed.modes, prevSent, pools, cfg))
+    await update($, pending, () => switchTexts(prev, parsed.modes, prevSent, cfg))
     await update($, modes, () => parsed.modes)
     await update($, sent, () => true)
-    if (pools !== undefined) await update($, poolsSent, () => pools)
     await writeState($, await $.session.id(), parsed.modes)
     await refresh($)
-    return { text: switchReply(parsed.modes, parsed.note, cfg) }
+    return { text: switchReply(parsed.modes) }
+  })
+
+  // A switch made mid-turn reaches the model with the next tool result. Subagents keep their own context.
+  on('classic.PostToolUse', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agent_id) return r
+    const extra = await takePending($)
+    return extra.length === 0 ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), ...extra] }
   })
 }
