@@ -23,13 +23,13 @@ Modes are per session and combine freely (`/work-mode auto wrap`). A bare `/work
 ## Install
 
 ```
-/plugin install work-mode --marketplace danyuchn/claude-work-mode
+/plugin install work-mode --marketplace 0Miles/claude-work-mode
 ```
 
 Answer `y` to add the marketplace, then pick a scope. Optional gates:
 
 ```
-/plugin install work-mode-gates --marketplace danyuchn/claude-work-mode
+/plugin install work-mode-gates --marketplace 0Miles/claude-work-mode
 ```
 
 Requirements: Claude Code with function-hook plugins (2.1.314 or later). The gates need `bash`, `jq`, `git` and `python3`.
