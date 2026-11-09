@@ -5,12 +5,12 @@
   "autonomous": {
     "extraRules": [
       "Running the project's own migration script against the local dev database is yours to do: dry run first, then apply."
-    ]
-  },
-  "converge": {
-    "sectionHeading": "Decisions Needed",
-    "decisionLabels": ["outbound", "payment", "delete", "permission", "tradeoff"],
-    "tradeoffLabel": "tradeoff",
+    ],
     "autoCloseCommand": null
+  },
+  "decisions": {
+    "sectionHeading": "Decisions Needed",
+    "labels": ["outbound", "payment", "delete", "permission", "tradeoff"],
+    "tradeoffLabel": "tradeoff"
   }
 }

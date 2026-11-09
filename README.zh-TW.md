@@ -4,13 +4,12 @@
 
 給 [Claude Code](https://claude.com/claude-code) 用的工作模式，一個斜線指令切換：
 
-| 模式 | 模型會被告知什麼 |
+| 指令 | 模型會被告知什麼 |
 | --- | --- |
-| `auto` | 本機、可回復的步驟（改檔、本地 commit、跑測試）不中途停下來問。真正要你點頭的事（對外發訊、安裝套件、碰憑證、刪掉救不回的資料、金流、改權限、動正式環境）記進待決清單，做完一次回報；會跳確認視窗的指令留到最後一口氣跑完，你只被打斷一次。 |
-| `wrap` | 收斂：不開新方向，把手上的做完；只列新增或狀態有變的待決事項，每項帶類別標籤與建議。 |
-| `off` | 回到平常。 |
+| `/work-mode auto` | 本機、可回復的步驟（改檔、本地 commit、跑測試）不中途停下來問。不擴大範圍：不開新方向，把手上的做完；途中發現的範圍外工作開成 GitHub issue（開在 repo 自己的 `origin`，不開到上游），不動手做。真正要你點頭的事（對外發訊、安裝套件、碰憑證、刪掉救不回的資料、金流、改權限、動正式環境）列在回覆最後的待決區塊，每項帶類別標籤與建議，只列新增或狀態有變的；會跳確認視窗的指令留到最後一口氣跑完，你只被打斷一次。 |
+| `/work-mode off` | 回到平常。 |
 
-模式只對當前 session 有效，可以任意組合（`/work-mode auto wrap`）。只打 `/work-mode` 會跳出可複選的選單。模式說明只送給模型一次（跟著下一個工具結果或下一則訊息），壓縮或 resume 之後才再送，不會每回合都塞進上下文。
+模式只對當前 session 有效。只打 `/work-mode` 會跳出選單。模式說明只送給模型一次（跟著下一個工具結果或下一則訊息），壓縮或 resume 之後才再送，不會每回合都塞進上下文。
 
 ## 示範影片（60 秒快速導覽）
 
@@ -18,7 +17,7 @@
 
 > [!TIP]
 > 點擊上方預覽圖即可播放 60 秒完整操作示範影片，包含三種模式的行為改變與痛點對照。
-> 影片錄於這個 fork 移除 `out` 之前，片中 `out` 的部分已不適用。
+> 影片錄於這個 fork 移除 `out`、把 `wrap` 併進 `auto` 之前，片中這些部分已不適用。
 
 ## 安裝
 
@@ -43,7 +42,7 @@
 | `scratch-doc-guard.sh` | PreToolUse `Write` | 新建 `SUMMARY*/REPORT*/NOTES*/FINDINGS*/ANALYSIS*.md` 前先問 | 拒絕：改寫進既有文件、放暫存資料夾，或直接寫在回覆裡 |
 | `git-safe-commit-gate.sh` | PreToolUse `Bash` | `git commit` 帶路徑（不論有沒有 `--`），或 `git add <檔>...` 而某檔有未 stage、且不全是這個 session 自己改的修改時先問（見 `own-edits.py`） | 拒絕：用管線把答案餵給 `git add -p`（例如 `printf 'y\nn\n' \| git add -p -- <檔>`），再用不帶路徑的 `git commit` |
 | `own-edits.py` | PreToolUse 與 PostToolUse `Edit\|Write\|MultiEdit\|NotebookEdit` | 記下這個 session 從乾淨狀態開始改、之後沒被別人動過的已追蹤檔案；這些檔 git 閘門會放行一般的 `git add <檔>`。不會擋任何操作 | 相同 |
-| `decision-label-guard.py` | Stop | 不檢查：只在 `wrap` 或 `auto` 開著時才檢查 | 回覆的待決區塊裡有沒標類別的項目，或「取捨」項目沒講兩邊各自得失，就擋下（`wrap` 下相同） |
+| `decision-label-guard.py` | Stop | 不檢查：只在 `auto` 開著時才檢查 | 回覆的待決區塊裡有沒標類別的項目，或「取捨」項目沒講兩邊各自得失，就擋下 |
 
 自己寫的閘門也可以引用 `tempo-auto.sh`。真正的硬停（憑證、force push、部署）不要接它，任何模式下都該問。
 
@@ -58,11 +57,11 @@
 | `locale` | 自動偵測 | `en` 或 `zh-TW` |
 | `userName`／`pronouns` | `the user`／`they` | 模式說明怎麼稱呼你（`they`、`he`、`she`） |
 | `autonomous.extraRules` | `[]` | 加進 `auto` 說明的額外規則 |
-| `converge.sectionHeading` | `待你決定`／`Decisions Needed` | 待決區塊標題 |
-| `converge.decisionLabels`／`tradeoffLabel` | `對外 金流 刪除 權限 取捨` | 每個待決項目開頭必須帶的標籤 |
-| `converge.autoCloseCommand` | `null` | 沒有未完成事項時模型自己跑的指令，例如收尾用的 skill |
+| `autonomous.autoCloseCommand` | `null` | 沒有未完成事項時模型自己跑的指令，例如收尾用的 skill |
+| `decisions.sectionHeading` | `待你決定`／`Decisions Needed` | 待決區塊標題 |
+| `decisions.labels`／`tradeoffLabel` | `對外 金流 刪除 權限 取捨` | 每個待決項目開頭必須帶的標籤；用預設標籤時，說明裡也會寫明每類硬停該標哪一個 |
 
-決策標籤閘門讀同一個設定檔的標題與標籤；沒有設定檔時中英兩組標籤都接受。舊版留下的 `dispatch` 區塊（`out` 用的設定）會被忽略。
+決策標籤閘門讀同一個設定檔的標題與標籤；沒有設定檔時中英兩組標籤都接受。
 
 ## 嵌進別的 mod
 

@@ -12,10 +12,10 @@ pros / cons / risk / 好處 / 代價 in the item and its indented lines); one th
 recommendation the model should just carry out.
 
 Labels and the heading can be customised in the work-mode config file
-(${WORK_MODE_CONFIG:-~/.config/work-mode/config.json}: converge.decisionLabels,
-converge.tradeoffLabel, converge.sectionHeading). Without one, both label sets are accepted.
+(${WORK_MODE_CONFIG:-~/.config/work-mode/config.json}: decisions.labels,
+decisions.tradeoffLabel, decisions.sectionHeading). Without one, both label sets are accepted.
 
-Only checks while /work-mode wrap or auto is on for the session (the work-mode plugin writes
+Only checks while /work-mode auto is on for the session (the work-mode plugin writes
 ${TEMPO_STATE_DIR:-~/.claude/state/tempo}/<session_id>); in a normal session it stays quiet.
 Fail-open on parse problems; the second pass (stop_hook_active) always passes.
 """
@@ -26,9 +26,9 @@ import sys
 
 DEFAULT_LABELS = ["對外", "金流", "刪除", "權限", "取捨", "outbound", "payment", "delete", "permission", "tradeoff"]
 DEFAULT_TRADEOFF = ["取捨", "tradeoff"]
-# work-mode's internal names for wrap and auto, as written to the session state file
-GUARDED_MODES = ("converge", "autonomous")
-HEADINGS =r"待你決定|要你決定|需要你決定|待決事項|Decisions?\s+Needed|Pending\s+Decisions?|Needs?\s+Your\s+Decision"
+# work-mode's internal name for auto, as written to the session state file
+GUARDED_MODES = ("autonomous",)
+HEADINGS = r"待你決定|要你決定|需要你決定|待決事項|Decisions?\s+Needed|Pending\s+Decisions?|Needs?\s+Your\s+Decision"
 
 
 def load_config():
@@ -36,8 +36,8 @@ def load_config():
     try:
         with open(os.path.expanduser(path), encoding="utf-8") as f:
             data = json.load(f)
-        conv = data.get("converge") or {}
-        return conv if isinstance(conv, dict) else {}
+        dec = data.get("decisions") or {}
+        return dec if isinstance(dec, dict) else {}
     except (OSError, ValueError, AttributeError):
         return {}
 
@@ -47,7 +47,7 @@ def _strings(v):
 
 
 _conf = load_config()
-LABELS = _strings(_conf.get("decisionLabels")) or DEFAULT_LABELS
+LABELS = _strings(_conf.get("labels")) or DEFAULT_LABELS
 _trade = _conf.get("tradeoffLabel")
 TRADEOFFS = [_trade] if isinstance(_trade, str) and _trade.strip() else DEFAULT_TRADEOFF
 _heading = _conf.get("sectionHeading")
@@ -204,7 +204,7 @@ def reason(msg: str, bad: list, weak: list) -> str:
 
 
 def guarded(sid) -> bool:
-    """True while wrap or auto is on for this session. A missing, unreadable or malformed
+    """True while auto is on for this session. A missing, unreadable or malformed
     state file counts as off, like the PreToolUse gates' tempo-auto.sh."""
     if not isinstance(sid, str) or not sid or "/" in sid or ".." in sid:
         return False

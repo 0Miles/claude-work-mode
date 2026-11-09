@@ -7,8 +7,8 @@ H="$(cd "$(dirname "$0")" && pwd)/hooks"
 T=$(mktemp -d "${TMPDIR:-/tmp}/wm-gates.XXXXXX")
 trap 'rm -rf "$T"' EXIT
 export TEMPO_STATE_DIR="$T/state"; mkdir -p "$TEMPO_STATE_DIR"
-printf '{"modes":["autonomous","converge"]}\n' > "$TEMPO_STATE_DIR/sid-on"
-printf '{"modes":["converge"]}\n' > "$TEMPO_STATE_DIR/sid-off"
+printf '{"modes":["autonomous"]}\n' > "$TEMPO_STATE_DIR/sid-on"
+printf '{"modes":[]}\n' > "$TEMPO_STATE_DIR/sid-off"
 printf 'not json' > "$TEMPO_STATE_DIR/sid-garbage"
 FAILS=0; N=0
 

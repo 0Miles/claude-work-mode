@@ -2,17 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { DEFAULT_CONFIG_EN, DEFAULT_CONFIG_ZH, localeFrom, resolveConfig, resolvePath } from './config'
-import {
-  autonomousText,
-  convergeText,
-  knownModes,
-  parseTempo,
-  pickedArgs,
-  pickerLabels,
-  switchReply,
-  switchTexts,
-  tempoLabel,
-} from './tempo'
+import { autonomousText, knownModes, parseTempo, pickedArgs, pickerLabels, switchReply, switchTexts, tempoLabel } from './tempo'
 
 const written: Record<string, string> = {}
 const statuses: Array<string | undefined> = []
@@ -75,13 +65,8 @@ const CUSTOM = {
   locale: 'en',
   userName: 'Alice',
   pronouns: 'she',
-  autonomous: { extraRules: ['Always run the linter before committing.'] },
-  converge: {
-    sectionHeading: 'Open Questions',
-    decisionLabels: ['external', 'money', 'choice'],
-    tradeoffLabel: 'choice',
-    autoCloseCommand: '/close-session',
-  },
+  autonomous: { extraRules: ['Always run the linter before committing.'], autoCloseCommand: '/close-session' },
+  decisions: { sectionHeading: 'Open Questions', labels: ['external', 'money', 'choice'], tradeoffLabel: 'choice' },
 }
 
 // ---- group A: zero config ---------------------------------------------------------------
@@ -94,68 +79,81 @@ test('A: no config file, English: neutral texts end to end', async ($, on) => {
   const r = await switched($, 'auto')
   expect(r.text).toContain('Work mode auto:')
   expect(r.text).toContain('compatible PreToolUse gates deny')
+  expect(r.text).toContain('files out-of-scope findings as GitHub issues')
   expect(r.context?.[0]).toBe('[tempo] The user switched work mode just now: auto is on from this point.')
   expect(r.context).toContain(autonomousText(DEFAULT_CONFIG_EN))
   expect(JSON.parse(written[STATE] ?? '{}')).toEqual({ modes: ['autonomous'] })
   expect(statuses.at(-1)).toBe('AUTO')
-  const w = await switched($, 'wrap auto')
-  expect(w.context).toContain(convergeText(DEFAULT_CONFIG_EN))
-  expect(w.context?.includes(autonomousText(DEFAULT_CONFIG_EN))).toBe(false) // already in context
-  expect(statuses.at(-1)).toBe('AUTO + WRAP')
+  const again = await switched($, 'auto')
+  expect(again.context).toEqual(['[tempo] The user switched work mode just now: auto is on from this point.'])
   const off = await switched($, 'off')
   expect(off.context?.[0]).toContain('The user turned work mode off')
   expect(STATE in written).toBe(false)
   expect(statuses.at(-1)).toBe(undefined)
-  expectNeutral([r.text, w.text, off.text, ...(r.context ?? []), ...(w.context ?? []), ...(off.context ?? [])])
+  expectNeutral([r.text, again.text, off.text, ...(r.context ?? []), ...(off.context ?? [])])
 })
 
-test('A: out is gone: /work-mode out is an unknown mode and changes nothing', async ($, on) => {
+test('A: wrap and out are gone: both are unknown modes and change nothing', async ($, on) => {
   world(on)
   await start($)
-  const r = await switched($, 'out')
-  expect(r.text).toContain('Unknown mode "out".')
-  expect(r.context).toBe(undefined)
+  for (const word of ['wrap', 'out']) {
+    const r = await switched($, word)
+    expect(r.text).toContain(`Unknown mode "${word}".`)
+    expect(r.context).toBe(undefined)
+  }
   expect(STATE in written).toBe(false)
 })
 
-test('A: default texts in both locales carry nothing personal', () => {
+test('A: the auto text in both locales: scope, issues, decisions, nothing personal', () => {
   for (const cfg of [DEFAULT_CONFIG_EN, DEFAULT_CONFIG_ZH]) {
+    const t = autonomousText(cfg)
     expectNeutral([
-      autonomousText(cfg),
-      convergeText(cfg),
-      switchReply(['autonomous', 'converge']),
-      switchReply(['converge']),
-      ...switchTexts(['converge'], ['autonomous'], false, cfg),
-      ...switchTexts(['converge'], [], true, cfg),
-      ...pickerLabels(['autonomous'], cfg),
+      t,
+      switchReply(['autonomous']),
+      switchReply([]),
+      ...switchTexts([], ['autonomous'], false, cfg),
+      ...switchTexts(['autonomous'], [], true, cfg),
+      ...pickerLabels(cfg),
     ])
+    expect(t).toContain('do not open new branches of work')
+    expect(t).toContain('gh issue create --repo')
+    expect(t).toContain('never in an upstream or third-party repository')
+    expect(t).toContain('Search its open issues first')
+    expect(t).toContain('Do not start the work.')
+    expect(t).toContain('the one outgoing step allowed')
+    expect(t).toContain('lists the issues you opened')
   }
-  expect(autonomousText(DEFAULT_CONFIG_EN)).toContain('so they are interrupted once')
-  expect(autonomousText(DEFAULT_CONFIG_EN)).toContain('do not wait for them')
-  expect(autonomousText(DEFAULT_CONFIG_EN)).toContain('in plain language.')
-  expect(convergeText(DEFAULT_CONFIG_EN)).toContain('[outbound] [payment] [delete] [permission] [tradeoff]')
-  expect(convergeText(DEFAULT_CONFIG_EN)).toContain('"Decisions Needed" section')
-  expect(convergeText(DEFAULT_CONFIG_EN)).toContain('Option A pros')
-  expect(convergeText(DEFAULT_CONFIG_EN)).toContain('turns on their preference')
-  expect(convergeText(DEFAULT_CONFIG_EN)).toContain('say in one line that the work is complete')
-  expect(convergeText(DEFAULT_CONFIG_ZH)).toContain('[對外] [金流] [刪除] [權限] [取捨]')
-  expect(convergeText(DEFAULT_CONFIG_ZH)).toContain('"待你決定" section')
-  expect(convergeText(DEFAULT_CONFIG_ZH)).toContain('A 的好處')
-  expect(convergeText(DEFAULT_CONFIG_ZH)).toContain('台灣用語')
+  const en = autonomousText(DEFAULT_CONFIG_EN)
+  expect(en).toContain('so they are interrupted once')
+  expect(en).toContain('do not wait for them')
+  expect(en).toContain('[outbound] [payment] [delete] [permission] [tradeoff]')
+  expect(en).toContain('outgoing messages take [outbound]')
+  expect(en).toContain('permission and production changes [permission]')
+  expect(en).toContain('"Decisions Needed" section')
+  expect(en).toContain('Option A pros')
+  expect(en).toContain('turns on their preference')
+  expect(en).toContain('say in one line that the work is complete')
+  const zh = autonomousText(DEFAULT_CONFIG_ZH)
+  expect(zh).toContain('[對外] [金流] [刪除] [權限] [取捨]')
+  expect(zh).toContain('outgoing messages take [對外]')
+  expect(zh).toContain('permission and production changes [權限]')
+  expect(zh).toContain('"待你決定" section')
+  expect(zh).toContain('A 的好處')
+  expect(zh).toContain('台灣用語')
 })
 
 test('A: Claude Code language setting picks Traditional Chinese even with an English LANG', async ($, on) => {
   world(on, { env: { LANG: 'en_US.UTF-8' }, language: '台灣繁體中文' })
   await start($)
-  const r = await switched($, 'wrap')
-  expect(r.context).toContain(convergeText(DEFAULT_CONFIG_ZH))
+  const r = await switched($, 'auto')
+  expect(r.context).toContain(autonomousText(DEFAULT_CONFIG_ZH))
   expectNeutral([r.text, ...(r.context ?? [])])
 })
 
 test('A: locale detection order: WORK_MODE_LOCALE, then settings, then LC_ALL/LANG', async ($, on) => {
   world(on, { env: { WORK_MODE_LOCALE: 'en', LANG: 'zh_TW.UTF-8' }, language: '中文' })
   await start($)
-  expect((await switched($, 'wrap')).context).toContain(convergeText(DEFAULT_CONFIG_EN))
+  expect((await switched($, 'auto')).context).toContain(autonomousText(DEFAULT_CONFIG_EN))
   expect(localeFrom('English')).toBe('en')
   expect(localeFrom('日本語')).toBe(undefined)
 })
@@ -163,7 +161,7 @@ test('A: locale detection order: WORK_MODE_LOCALE, then settings, then LC_ALL/LA
 test('A: with no language setting, a zh LANG picks Traditional Chinese', async ($, on) => {
   world(on, { env: { LANG: 'zh_TW.UTF-8' } })
   await start($)
-  expect((await switched($, 'wrap')).context).toContain(convergeText(DEFAULT_CONFIG_ZH))
+  expect((await switched($, 'auto')).context).toContain(autonomousText(DEFAULT_CONFIG_ZH))
 })
 
 test('A: a subagent tool call does not take the switch notice meant for the main thread', async ($, on) => {
@@ -178,7 +176,7 @@ test('A: a subagent tool call does not take the switch notice meant for the main
 
 // ---- group B: custom config ------------------------------------------------------------
 
-test('B: every override reaches the texts and the reply', async ($, on) => {
+test('B: every override reaches the text', async ($, on) => {
   world(on, { files: { [CFG_PATH]: JSON.stringify(CUSTOM) } })
   await start($)
   const r = await switched($, 'auto')
@@ -188,13 +186,13 @@ test('B: every override reaches the texts and the reply', async ($, on) => {
   expect(auto).toContain('Always run the linter before committing.')
   expect(auto).toContain('so she is interrupted once')
   expect(auto).toContain('do not wait for her')
-  const wrap = await switched($, 'wrap')
-  const conv = (wrap.context ?? []).find(t => t.startsWith('[tempo: converge]')) ?? ''
-  expect(conv).toContain('"Open Questions" section')
-  expect(conv).toContain('[external] [money] [choice]')
-  expect(conv).toContain('[choice] is not a catch-all')
-  expect(conv).toContain('turns on her preference')
-  expect(conv).toContain('run /close-session yourself without asking')
+  expect(auto).toContain('"Open Questions" section')
+  expect(auto).toContain('one label: [external] [money] [choice]. An item')
+  expect(auto.includes('outgoing messages take')).toBe(false) // custom labels get no hard-stop map
+  expect(auto).toContain('[choice] is not a catch-all')
+  expect(auto).toContain('turns on her preference')
+  expect(auto).toContain('run /close-session yourself without asking')
+  expect(auto).toContain('awaiting her, do not run it')
 })
 
 test('B: WORK_MODE_CONFIG with ~ points at another file; removing it resets to defaults', async ($, on) => {
@@ -204,16 +202,22 @@ test('B: WORK_MODE_CONFIG with ~ points at another file; removing it resets to d
   expect((await switched($, 'auto')).context?.[0]).toContain('Bob switched')
   delete files['/home/u/elsewhere.json']
   await start($)
-  expect((await switched($, 'wrap')).context?.[0]).toContain('The user switched')
+  expect((await switched($, 'auto')).context?.[0]).toContain('The user switched')
 })
 
-test('B: malformed fields fall back one by one; an old dispatch section is ignored', () => {
-  const cfg = resolveConfig({ userName: 7, pronouns: 'xe', dispatch: { pickerHint: 'x' }, converge: { decisionLabels: [] } })
+test('B: malformed fields fall back one by one', () => {
+  const cfg = resolveConfig({
+    userName: 7,
+    pronouns: 'xe',
+    autonomous: { autoCloseCommand: ' ' },
+    decisions: { labels: [], tradeoffLabel: 'nope' },
+  })
   expect(cfg.userName).toBe('the user')
   expect(cfg.pronouns).toBe('they')
-  expect('dispatch' in cfg).toBe(false)
-  expect(cfg.converge.decisionLabels).toEqual(DEFAULT_CONFIG_EN.converge.decisionLabels)
-  expect(resolveConfig('not an object', 'zh-TW').converge.sectionHeading).toBe('待你決定')
+  expect(cfg.autonomous.autoCloseCommand).toBe(null)
+  expect(cfg.decisions.labels).toEqual(DEFAULT_CONFIG_EN.decisions.labels)
+  expect(cfg.decisions.tradeoffLabel).toBe('tradeoff')
+  expect(resolveConfig('not an object', 'zh-TW').decisions.sectionHeading).toBe('待你決定')
   expect(resolvePath('~/a/b', '/h')).toBe('/h/a/b')
   expect(resolvePath('/abs', '/h')).toBe('/abs')
 })
@@ -222,38 +226,29 @@ test('B: malformed fields fall back one by one; an old dispatch section is ignor
 
 test('tempo arguments and labels', () => {
   expect(parseTempo('')).toEqual({ kind: 'status' })
-  expect(parseTempo(' Converge ')).toEqual({ kind: 'set', modes: ['converge'] })
-  expect(parseTempo('autonomous+converge')).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
-  expect(parseTempo('wrap auto')).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
+  expect(parseTempo(' Autonomous ')).toEqual({ kind: 'set', modes: ['autonomous'] })
+  expect(parseTempo('auto')).toEqual({ kind: 'set', modes: ['autonomous'] })
   expect(parseTempo('off')).toEqual({ kind: 'set', modes: [] })
-  expect(parseTempo('out').kind).toBe('error')
-  expect(parseTempo('dispatch').kind).toBe('error')
-  expect(parseTempo('fast').kind).toBe('error')
+  expect(parseTempo('auto off')).toEqual({ kind: 'set', modes: ['autonomous'] })
+  for (const w of ['wrap', 'converge', 'out', 'dispatch', 'fast']) expect(parseTempo(w).kind).toBe('error')
   expect(tempoLabel([])).toBe(undefined)
-  expect(tempoLabel(['autonomous', 'converge'])).toBe('AUTO + WRAP')
-  expect(knownModes(['dispatch', 'converge', 'autonomous'])).toEqual(['autonomous', 'converge'])
+  expect(tempoLabel(['autonomous'])).toBe('AUTO')
+  expect(knownModes(['converge', 'dispatch', 'autonomous'])).toEqual(['autonomous'])
 })
 
-test('picker: labels in both locales map back to modes', () => {
-  const cfg = resolveConfig(CUSTOM)
-  const en = pickerLabels(['autonomous'], cfg)
-  expect(en.length).toBe(3)
-  expect(en[2]).toBe('off - turn off')
-  expect(pickerLabels([], cfg).length).toBe(2)
-  expect(parseTempo(pickedArgs(en.join(', '), cfg))).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
-  expect(parseTempo(pickedArgs(`${en[1]}, ${en[0]}`, cfg))).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
-  const zcfg = resolveConfig({ ...CUSTOM, locale: 'zh-TW' })
-  const zh = pickerLabels(['converge'], zcfg)
-  expect(zh[1]).toBe('wrap 收斂（不開新方向）')
-  expect(parseTempo(pickedArgs(`${zh[2]}`, zcfg))).toEqual({ kind: 'set', modes: [] })
-  expect(parseTempo(pickedArgs(`${zh[0]}, ${zh[1]}`, zcfg))).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
-  expect(pickedArgs('auto wrap')).toBe('auto wrap')
-  expect(parseTempo(pickedArgs('wrap + auto'))).toEqual({ kind: 'set', modes: ['autonomous', 'converge'] })
+test('picker: labels in both locales map back to auto and off', () => {
+  const en = pickerLabels(DEFAULT_CONFIG_EN)
+  const zh = pickerLabels(DEFAULT_CONFIG_ZH)
+  for (const l of [...en, ...zh]) expect(l.includes(',')).toBe(false)
+  expect(parseTempo(pickedArgs(en[0] ?? ''))).toEqual({ kind: 'set', modes: ['autonomous'] })
+  expect(parseTempo(pickedArgs(en[1] ?? ''))).toEqual({ kind: 'set', modes: [] })
+  expect(parseTempo(pickedArgs(zh[0] ?? '', DEFAULT_CONFIG_ZH))).toEqual({ kind: 'set', modes: ['autonomous'] })
+  expect(parseTempo(pickedArgs(zh[1] ?? '', DEFAULT_CONFIG_ZH))).toEqual({ kind: 'set', modes: [] })
   expect(parseTempo(pickedArgs('auto nonsense')).kind).toBe('error')
   expect(parseTempo(pickedArgs('something else')).kind).toBe('error')
 })
 
-test('mode texts go out once, then again after a compaction or /clear turns them off', async ($, on) => {
+test('the mode text goes out once, then again after a compaction or /clear turns it off', async ($, on) => {
   world(on)
   on('session.compact', (_$, e) => ({ messages: e.messages }) as never)
   on('classic.SessionStart', () => ({}))

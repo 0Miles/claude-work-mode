@@ -2,7 +2,7 @@ import type { Register } from 'claude-code'
 
 import { registerTempo, tempoClear, tempoContext, tempoResend, tempoStart } from './tempo'
 
-// /work-mode (auto, wrap).
+// /work-mode auto | off.
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await tempoStart($)

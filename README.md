@@ -2,15 +2,14 @@
 
 [繁體中文](README.zh-TW.md)
 
-Session work modes for [Claude Code](https://claude.com/claude-code), switched with one slash command:
+A session work mode for [Claude Code](https://claude.com/claude-code), switched with one slash command:
 
-| Mode | What the model is told |
+| Command | What the model is told |
 | --- | --- |
-| `auto` | Do not stop to ask about internal, reversible steps (local files, local commits, tests). Hard stops (outgoing messages, installs, secrets, unrecoverable deletes, payments, permission changes, production changes) go to a pending list reported once at the end. Calls that will raise a confirmation prompt are run last, back to back. |
-| `wrap` | Converge: open no new branches, finish what is open, list only new or changed decisions, each with a label and a recommendation. |
-| `off` | Back to normal. |
+| `/work-mode auto` | Do not stop to ask about internal, reversible steps (local files, local commits, tests). Stay in scope: open no new branches, finish what is open. Out-of-scope work noticed on the way is filed as a GitHub issue in the repo's own `origin` (never upstream), not done. Hard stops (outgoing messages, installs, secrets, unrecoverable deletes, payments, permission changes, production changes) go to a decision list at the end of the reply: each item labelled, with a recommendation, and only new or changed items are shown. Calls that will raise a confirmation prompt are run last, back to back. |
+| `/work-mode off` | Back to normal. |
 
-Modes are per session and combine freely (`/work-mode auto wrap`). A bare `/work-mode` opens a multi-select picker. The mode text reaches the model once (with the next tool result or prompt) and again only after a compaction or resume, so it does not bloat every turn.
+The mode is per session. A bare `/work-mode` opens a picker. The mode text reaches the model once (with the next tool result or prompt) and again only after a compaction or resume, so it does not bloat every turn.
 
 ## Demo (60s Walkthrough)
 
@@ -18,7 +17,7 @@ Modes are per session and combine freely (`/work-mode auto wrap`). A bare `/work
 
 > [!TIP]
 > Click the preview above to play the 60-second walkthrough video demonstrating behavioral changes across all three modes.
-> It was recorded before this fork removed `out`; the `out` parts no longer apply.
+> It was recorded before this fork removed `out` and merged `wrap` into `auto`; those parts no longer apply.
 
 ## Install
 
@@ -36,14 +35,14 @@ Requirements: Claude Code with function-hook plugins (2.1.314 or later). The gat
 
 ## The optional gates (`work-mode-gates`)
 
-The modes are written to `~/.claude/state/tempo/<session_id>` so shell hooks can read them. `hooks/lib/tempo-auto.sh` gives a gate two helpers: `tempo_auto_on "$INPUT"` and `tempo_deny "<reason>"`. Under `auto`, a gate that would ask denies instead, with a reason telling the model what to do, so work continues without a prompt. The plugin ships three gates and one helper hook:
+The mode is written to `~/.claude/state/tempo/<session_id>` so shell hooks can read them. `hooks/lib/tempo-auto.sh` gives a gate two helpers: `tempo_auto_on "$INPUT"` and `tempo_deny "<reason>"`. Under `auto`, a gate that would ask denies instead, with a reason telling the model what to do, so work continues without a prompt. The plugin ships three gates and one helper hook:
 
 | Gate | Event | Normally | Under `auto` |
 | --- | --- | --- | --- |
 | `scratch-doc-guard.sh` | PreToolUse `Write` | asks before creating a new `SUMMARY*/REPORT*/NOTES*/FINDINGS*/ANALYSIS*.md` | denies: update the existing doc, use a scratch dir, or answer in the reply |
 | `git-safe-commit-gate.sh` | PreToolUse `Bash` | asks on `git commit` with paths (with or without `--`) and on `git add <file>...` when a file has unstaged edits that are not all this session's own (see `own-edits.py`) | denies: pipe the answers into `git add -p` (e.g. `printf 'y\nn\n' \| git add -p -- <file>`), then a plain `git commit` |
 | `own-edits.py` | PreToolUse and PostToolUse `Edit\|Write\|MultiEdit\|NotebookEdit` | records the tracked files this session edited from a clean start that nothing else has changed since; the git gate lets a plain `git add <file>` through for those. Never blocks | same |
-| `decision-label-guard.py` | Stop | stays quiet: it checks only while `wrap` or `auto` is on | blocks a reply whose decisions section holds an unlabeled item, or a tradeoff item that does not state what each side gains (same under `wrap`) |
+| `decision-label-guard.py` | Stop | stays quiet: it checks only while `auto` is on | blocks a reply whose decisions section holds an unlabeled item, or a tradeoff item that does not state what each side gains |
 
 Use `tempo-auto.sh` in your own gates for anything you want converted. Keep real hard stops (secrets, force pushes, deploys) out of it: they should ask in every mode.
 
@@ -56,13 +55,13 @@ To personalise, create `~/.config/work-mode/config.json` (or point `WORK_MODE_CO
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `locale` | detected | `en` or `zh-TW` |
-| `userName` / `pronouns` | `the user` / `they` | how the mode texts refer to you (`they`, `he`, `she`) |
+| `userName` / `pronouns` | `the user` / `they` | how the mode text refers to you (`they`, `he`, `she`) |
 | `autonomous.extraRules` | `[]` | extra lines for the `auto` text |
-| `converge.sectionHeading` | `Decisions Needed` / `待你決定` | heading for decision items |
-| `converge.decisionLabels` / `tradeoffLabel` | `outbound payment delete permission tradeoff` | labels each decision must start with |
-| `converge.autoCloseCommand` | `null` | a command the model runs on its own when nothing is open, e.g. a session-closing skill |
+| `autonomous.autoCloseCommand` | `null` | a command the model runs on its own when nothing is open, e.g. a session-closing skill |
+| `decisions.sectionHeading` | `Decisions Needed` / `待你決定` | heading for decision items |
+| `decisions.labels` / `tradeoffLabel` | `outbound payment delete permission tradeoff` | labels each decision must start with; with a default set, the text also says which label each hard stop takes |
 
-The decision-label gate reads the same file for its heading and labels; without one it accepts both the English and the Chinese label sets. A `dispatch` section left over from a version with `out` is ignored.
+The decision-label gate reads the same file for its heading and labels; without one it accepts both the English and the Chinese label sets.
 
 ## Embedding in another mod
 

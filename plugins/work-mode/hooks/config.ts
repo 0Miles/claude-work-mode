@@ -9,19 +9,21 @@ export type Pronouns = 'they' | 'he' | 'she'
 
 export interface WorkModeConfig {
   locale: Locale
-  /** How the mode texts name the person driving the session. */
+  /** How the mode text names the person driving the session. */
   userName: string
   pronouns: Pronouns
   autonomous: {
-    /** Extra lines appended to the autonomous text, after the hard stops. */
+    /** Extra lines appended to the auto text, after the hard stops. */
     extraRules: string[]
-  }
-  converge: {
-    sectionHeading: string
-    decisionLabels: string[]
-    tradeoffLabel: string
-    /** A command the model runs on its own once nothing is open, e.g. "/checkpoint"; null for none. */
+    /** A command the model runs on its own once nothing is open, e.g. a session-closing skill; null for none. */
     autoCloseCommand: string | null
+  }
+  /** The decision list at the end of a reply; decision-label-guard.py reads the same section. */
+  decisions: {
+    sectionHeading: string
+    /** The first four take the hard stops: outgoing, payment, delete, permission; the last is the tradeoff label. */
+    labels: string[]
+    tradeoffLabel: string
   }
 }
 
@@ -31,23 +33,22 @@ export const DEFAULT_CONFIG_EN: WorkModeConfig = {
   pronouns: 'they',
   autonomous: {
     extraRules: [],
-  },
-  converge: {
-    sectionHeading: 'Decisions Needed',
-    decisionLabels: ['outbound', 'payment', 'delete', 'permission', 'tradeoff'],
-    tradeoffLabel: 'tradeoff',
     autoCloseCommand: null,
+  },
+  decisions: {
+    sectionHeading: 'Decisions Needed',
+    labels: ['outbound', 'payment', 'delete', 'permission', 'tradeoff'],
+    tradeoffLabel: 'tradeoff',
   },
 }
 
 export const DEFAULT_CONFIG_ZH: WorkModeConfig = {
   ...DEFAULT_CONFIG_EN,
   locale: 'zh-TW',
-  converge: {
+  decisions: {
     sectionHeading: '待你決定',
-    decisionLabels: ['對外', '金流', '刪除', '權限', '取捨'],
+    labels: ['對外', '金流', '刪除', '權限', '取捨'],
     tradeoffLabel: '取捨',
-    autoCloseCommand: null,
   },
 }
 
@@ -84,29 +85,28 @@ const str = (v: unknown, d: string): string => (typeof v === 'string' && v.trim(
 const strList = (v: unknown, d: string[]): string[] =>
   Array.isArray(v) && v.every(x => typeof x === 'string') ? (v as string[]) : d
 
-/**
- * Merges a parsed config file over the locale's defaults; anything malformed falls back field by field.
- * Unknown sections are ignored, including the `dispatch` section an older version read for `out`.
- */
+/** Merges a parsed config file over the locale's defaults; anything malformed falls back field by field. */
 export function resolveConfig(raw: unknown, fallbackLocale: Locale = 'en'): WorkModeConfig {
   const r = isObj(raw) ? raw : {}
   const locale = r.locale === 'en' || r.locale === 'zh-TW' ? r.locale : fallbackLocale
   const base = locale === 'zh-TW' ? DEFAULT_CONFIG_ZH : DEFAULT_CONFIG_EN
   const a = isObj(r.autonomous) ? r.autonomous : {}
-  const c = isObj(r.converge) ? r.converge : {}
-  const labels = strList(c.decisionLabels, base.converge.decisionLabels).filter(l => l.trim() !== '')
-  const decisionLabels = labels.length > 0 ? labels : base.converge.decisionLabels
-  const tradeoff = str(c.tradeoffLabel, base.converge.tradeoffLabel)
+  const d = isObj(r.decisions) ? r.decisions : {}
+  const list = strList(d.labels, base.decisions.labels).filter(l => l.trim() !== '')
+  const labels = list.length > 0 ? list : base.decisions.labels
+  const tradeoff = str(d.tradeoffLabel, base.decisions.tradeoffLabel)
   return {
     locale,
     userName: str(r.userName, base.userName),
     pronouns: r.pronouns === 'he' || r.pronouns === 'she' || r.pronouns === 'they' ? r.pronouns : base.pronouns,
-    autonomous: { extraRules: strList(a.extraRules, base.autonomous.extraRules) },
-    converge: {
-      sectionHeading: str(c.sectionHeading, base.converge.sectionHeading),
-      decisionLabels,
-      tradeoffLabel: decisionLabels.includes(tradeoff) ? tradeoff : (decisionLabels.at(-1) ?? tradeoff),
-      autoCloseCommand: typeof c.autoCloseCommand === 'string' && c.autoCloseCommand.trim() !== '' ? c.autoCloseCommand : null,
+    autonomous: {
+      extraRules: strList(a.extraRules, base.autonomous.extraRules),
+      autoCloseCommand: typeof a.autoCloseCommand === 'string' && a.autoCloseCommand.trim() !== '' ? a.autoCloseCommand : null,
+    },
+    decisions: {
+      sectionHeading: str(d.sectionHeading, base.decisions.sectionHeading),
+      labels,
+      tradeoffLabel: labels.includes(tradeoff) ? tradeoff : (labels.at(-1) ?? tradeoff),
     },
   }
 }

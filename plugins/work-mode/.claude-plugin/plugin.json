@@ -1,7 +1,7 @@
 {
   "name": "work-mode",
-  "version": "0.6.0",
-  "description": "/work-mode session modes for Claude Code: auto (no mid-task questions), wrap (converge and finish)",
+  "version": "0.7.0",
+  "description": "/work-mode auto for Claude Code: no mid-task questions, stays in scope, files out-of-scope findings as GitHub issues",
   "types": "./types/index.d.ts",
   "author": { "name": "Dustin Yuchen Teng" },
   "license": "MIT"

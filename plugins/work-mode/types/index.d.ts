@@ -1,4 +1,4 @@
-export type TempoMode = 'converge' | 'autonomous'
+export type TempoMode = 'autonomous'
 
 declare module 'claude-code' {
   interface PluginState {
