@@ -1,5 +1,5 @@
 {
-  "description": "PreToolUse and Stop gates for work-mode (auto ask->deny conversion and wrap decision label check)",
+  "description": "PreToolUse, PostToolUse and Stop gates for work-mode (auto ask->deny conversion, own-edit tracking for the git gate, decision label check)",
   "hooks": {
     "PreToolUse": [
       {
@@ -12,6 +12,20 @@
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/git-safe-commit-gate.sh\"" }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/own-edits.py\" pre" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/own-edits.py\" post" }
         ]
       }
     ],

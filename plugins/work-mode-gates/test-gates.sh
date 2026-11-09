@@ -81,6 +81,29 @@ done
 expect "add -A passes" none "$(decision git-safe-commit-gate.sh "$(bash_in 'git add -A' sid-off)")"
 expect "unrelated bash passes" none "$(decision git-safe-commit-gate.sh "$(bash_in 'ls -la' sid-on)")"
 
+# A file this session edited from a clean start (own-edits.py) may be added whole.
+export WORK_MODE_EDITS_DIR="$T/edits"
+edit_in() { jq -n --arg f "$1" --arg s "$2" '{session_id:$s,tool_name:"Edit",tool_input:{file_path:$f,old_string:"a",new_string:"b"}}'; }
+track() { python3 "$H/own-edits.py" "$1" <<<"$(edit_in "$2" "$3")"; }  # track <pre|post> <file> <sid>
+edit_as() { track pre "$1" "$2"; echo "$3" >> "$1"; track post "$1" "$2"; }  # one Edit call as the hooks see it
+echo a > "$R/own.txt"; echo a > "$R/later.txt"; git -C "$R" add own.txt later.txt; git -C "$R" commit -qm own
+edit_as "$R/own.txt" sid-on b
+expect "own edit from a clean start passes under auto" none "$(decision git-safe-commit-gate.sh "$(bash_in 'git add own.txt' sid-on)")"
+edit_as "$R/own.txt" sid-on c
+expect "a second own edit still passes" none "$(decision git-safe-commit-gate.sh "$(bash_in 'git add own.txt' sid-on)")"
+expect "own file through ./ passes" none "$(decision git-safe-commit-gate.sh "$(bash_in 'git add ./own.txt' sid-on)")"
+expect "another session's add of the same file still asks" ask "$(decision git-safe-commit-gate.sh "$(bash_in 'git add own.txt' sid-off)")"
+expect "own file next to a shared one still denies" deny "$(decision git-safe-commit-gate.sh "$(bash_in 'git add own.txt shared.txt' sid-on)")"
+edit_as "$R/shared.txt" sid-on c
+expect "editing a file that was already dirty does not make it own" deny "$(decision git-safe-commit-gate.sh "$(bash_in 'git add shared.txt' sid-on)")"
+edit_as "$R/later.txt" sid-on b
+echo x >> "$R/later.txt"
+expect "a change after the session's last edit denies" deny "$(decision git-safe-commit-gate.sh "$(bash_in 'git add later.txt' sid-on)")"
+edit_as "$R/later.txt" sid-on c
+expect "and the file stays mixed after the next edit" deny "$(decision git-safe-commit-gate.sh "$(bash_in 'git add later.txt' sid-on)")"
+expect "tracker prints nothing" "" "$(track pre "$R/own.txt" sid-on)"
+expect "tracker ignores a path-like session id" 0 "$(track pre "$R/own.txt" '../x'; ls "$T" | grep -c '^x$')"
+
 expect "new SUMMARY.md asks" ask "$(decision scratch-doc-guard.sh "$(write_in "$R/SUMMARY.md" sid-off)")"
 expect "new REPORT-x.md denies under auto" deny "$(decision scratch-doc-guard.sh "$(write_in "$R/REPORT-x.md" sid-on)")"
 touch "$R/NOTES.md"

@@ -36,12 +36,13 @@ Requirements: Claude Code with function-hook plugins (2.1.314 or later). The gat
 
 ## The optional gates (`work-mode-gates`)
 
-The modes are written to `~/.claude/state/tempo/<session_id>` so shell hooks can read them. `hooks/lib/tempo-auto.sh` gives a gate two helpers: `tempo_auto_on "$INPUT"` and `tempo_deny "<reason>"`. Under `auto`, a gate that would ask denies instead, with a reason telling the model what to do, so work continues without a prompt. The plugin ships three gates:
+The modes are written to `~/.claude/state/tempo/<session_id>` so shell hooks can read them. `hooks/lib/tempo-auto.sh` gives a gate two helpers: `tempo_auto_on "$INPUT"` and `tempo_deny "<reason>"`. Under `auto`, a gate that would ask denies instead, with a reason telling the model what to do, so work continues without a prompt. The plugin ships three gates and one helper hook:
 
 | Gate | Event | Normally | Under `auto` |
 | --- | --- | --- | --- |
 | `scratch-doc-guard.sh` | PreToolUse `Write` | asks before creating a new `SUMMARY*/REPORT*/NOTES*/FINDINGS*/ANALYSIS*.md` | denies: update the existing doc, use a scratch dir, or answer in the reply |
-| `git-safe-commit-gate.sh` | PreToolUse `Bash` | asks on `git commit` with paths (with or without `--`) and on `git add <file>...` when a file already had unstaged edits | denies: pipe the answers into `git add -p` (e.g. `printf 'y\nn\n' \| git add -p -- <file>`), then a plain `git commit` |
+| `git-safe-commit-gate.sh` | PreToolUse `Bash` | asks on `git commit` with paths (with or without `--`) and on `git add <file>...` when a file has unstaged edits that are not all this session's own (see `own-edits.py`) | denies: pipe the answers into `git add -p` (e.g. `printf 'y\nn\n' \| git add -p -- <file>`), then a plain `git commit` |
+| `own-edits.py` | PreToolUse and PostToolUse `Edit\|Write\|MultiEdit\|NotebookEdit` | records the tracked files this session edited from a clean start that nothing else has changed since; the git gate lets a plain `git add <file>` through for those. Never blocks | same |
 | `decision-label-guard.py` | Stop | blocks a reply whose decisions section holds an unlabeled item, or a tradeoff item that does not state what each side gains | same |
 
 Use `tempo-auto.sh` in your own gates for anything you want converted. Keep real hard stops (secrets, force pushes, deploys) out of it: they should ask in every mode.

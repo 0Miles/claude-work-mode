@@ -36,12 +36,13 @@
 
 ## 選裝閘門（`work-mode-gates`）
 
-模式會寫進 `~/.claude/state/tempo/<session_id>`，讓 shell hook 讀得到。`hooks/lib/tempo-auto.sh` 提供兩個函式：`tempo_auto_on "$INPUT"` 與 `tempo_deny "<理由>"`。開 `auto` 時，原本會「詢問」的閘門改成「拒絕並附上該怎麼做」，模型照著改做法就能繼續，不必停下來等你。內附三個閘門：
+模式會寫進 `~/.claude/state/tempo/<session_id>`，讓 shell hook 讀得到。`hooks/lib/tempo-auto.sh` 提供兩個函式：`tempo_auto_on "$INPUT"` 與 `tempo_deny "<理由>"`。開 `auto` 時，原本會「詢問」的閘門改成「拒絕並附上該怎麼做」，模型照著改做法就能繼續，不必停下來等你。內附三個閘門和一個輔助 hook：
 
 | 閘門 | 事件 | 平常 | `auto` 下 |
 | --- | --- | --- | --- |
 | `scratch-doc-guard.sh` | PreToolUse `Write` | 新建 `SUMMARY*/REPORT*/NOTES*/FINDINGS*/ANALYSIS*.md` 前先問 | 拒絕：改寫進既有文件、放暫存資料夾，或直接寫在回覆裡 |
-| `git-safe-commit-gate.sh` | PreToolUse `Bash` | `git commit` 帶路徑（不論有沒有 `--`），或 `git add <檔>...` 而某檔原本就有未 stage 的修改時先問 | 拒絕：用管線把答案餵給 `git add -p`（例如 `printf 'y\nn\n' \| git add -p -- <檔>`），再用不帶路徑的 `git commit` |
+| `git-safe-commit-gate.sh` | PreToolUse `Bash` | `git commit` 帶路徑（不論有沒有 `--`），或 `git add <檔>...` 而某檔有未 stage、且不全是這個 session 自己改的修改時先問（見 `own-edits.py`） | 拒絕：用管線把答案餵給 `git add -p`（例如 `printf 'y\nn\n' \| git add -p -- <檔>`），再用不帶路徑的 `git commit` |
+| `own-edits.py` | PreToolUse 與 PostToolUse `Edit\|Write\|MultiEdit\|NotebookEdit` | 記下這個 session 從乾淨狀態開始改、之後沒被別人動過的已追蹤檔案；這些檔 git 閘門會放行一般的 `git add <檔>`。不會擋任何操作 | 相同 |
 | `decision-label-guard.py` | Stop | 回覆的待決區塊裡有沒標類別的項目，或「取捨」項目沒講兩邊各自得失，就擋下 | 相同 |
 
 自己寫的閘門也可以引用 `tempo-auto.sh`。真正的硬停（憑證、force push、部署）不要接它，任何模式下都該問。

@@ -7,6 +7,8 @@
 # (git add -p fed its answers through a pipe, then a plain git commit) so the model
 # carries on without asking.
 # Bulk adds (-A, --all, -u, .) and interactive ones (-p, -i, -e) are left alone: they are explicit.
+# A file whose every change came from this session's own Edit/Write calls (recorded by
+# own-edits.py) may be added whole: nobody else's work can be in it.
 # The command line is parsed with python3's shlex (quotes, `git -C dir`, `&&`/`;` chains);
 # without python3 the gate stays out of the way.
 
@@ -22,12 +24,15 @@ COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null) 
 case "$COMMAND" in *git*) ;; *) exit 0 ;; esac
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null)
 [ -n "$CWD" ] && [ -d "$CWD" ] || CWD=$PWD
+# own-edits.py's records for this session (same folder layout, same id check as there)
+SID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null)
+case "$SID" in ""|*/*|*..*) EDITS="" ;; *) EDITS="${WORK_MODE_EDITS_DIR:-$HOME/.claude/state/work-mode-gates/edits}/$SID" ;; esac
 
 # Prints one finding per line: "commit<TAB><path>" or "add<TAB><path>" (the path as typed).
-FOUND=$(GATE_CMD="$COMMAND" GATE_CWD="$CWD" python3 - <<'PY' 2>/dev/null
-import os, shlex, subprocess
+FOUND=$(GATE_CMD="$COMMAND" GATE_CWD="$CWD" GATE_EDITS="$EDITS" python3 - <<'PY' 2>/dev/null
+import hashlib, os, shlex, subprocess
 
-cmd, cwd = os.environ["GATE_CMD"], os.environ["GATE_CWD"]
+cmd, cwd, edits = os.environ["GATE_CMD"], os.environ["GATE_CWD"], os.environ.get("GATE_EDITS", "")
 try:
     lex = shlex.shlex(cmd, posix=True, punctuation_chars=";&|()<>\n")
     lex.whitespace = " \t\r"
@@ -76,6 +81,31 @@ def modified(repo, path):
     except Exception:
         return False
     return any(len(l) > 1 and (l[0] == "M" or l[1] == "M") for l in out.splitlines())
+
+
+def own(repo, path):
+    """True when own-edits.py saw this session make every change the file holds right now."""
+    if not edits:
+        return False
+    full = os.path.realpath(os.path.join(repo, os.path.expanduser(path)))
+    if not os.path.isfile(full):
+        return False
+    key = hashlib.sha1(full.encode("utf-8", "surrogateescape")).hexdigest()
+    try:
+        with open(os.path.join(edits, key), encoding="utf-8") as fh:
+            rec = fh.read().split()
+    except OSError:
+        return False
+    if len(rec) != 2 or rec[0] != "own":
+        return False
+    d, name = os.path.split(full)
+    try:
+        now = subprocess.run(["git", "-C", d, "hash-object", "--no-filters", "--", name],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        return False
+    # changed after the session's last edit: someone else may have added to it
+    return now == rec[1]
 
 
 def is_env(word):
@@ -168,7 +198,7 @@ for seg in segments:
                 continue
             paths.extend(listed)
         for p in paths:
-            if modified(repo, p):
+            if modified(repo, p) and not own(repo, p):
                 print("add\t" + p)
 PY
 )
@@ -196,7 +226,7 @@ if [ -n "$COMMIT_PATHS" ]; then
 fi
 if [ -n "$ADD_PATHS" ]; then
   decide git-add-shared-file \
-    "$ADD_PATHS has unstaged changes, and git add <file> would stage all of them; this gate cannot tell which of them are yours. Do not stop to ask. $HOW_TO If you cannot tell which hunks are yours, put the file on the pending list and continue with the rest." \
+    "$ADD_PATHS has unstaged changes that this session's own edits do not fully account for, and git add <file> would stage all of them. Do not stop to ask. $HOW_TO If you cannot tell which hunks are yours, put the file on the pending list and continue with the rest." \
     "$ADD_PATHS already shows unstaged modifications; they may belong to a parallel session or the user. git add <file> stages the ENTIRE working-tree content. Use git add -p to pick hunks, or confirm you mean to stage all of it."
 fi
 exit 0
