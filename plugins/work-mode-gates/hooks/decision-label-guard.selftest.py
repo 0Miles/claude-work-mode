@@ -11,6 +11,12 @@ from pathlib import Path
 
 HOOK = Path(__file__).with_name("decision-label-guard.py")
 os.environ["WORK_MODE_CONFIG"] = os.path.join(tempfile.gettempdir(), "work-mode-selftest-no-such-file.json")
+# The guard only speaks while wrap or auto is on: session states as the work-mode plugin writes them.
+STATE = tempfile.TemporaryDirectory()
+os.environ["TEMPO_STATE_DIR"] = STATE.name
+for sid, body in {"sid-wrap": '{"modes":["converge"]}', "sid-auto": '{"modes":["autonomous"]}',
+                  "sid-none": '{"modes":[]}', "sid-garbage": "not json"}.items():
+    Path(STATE.name, sid).write_text(body + "\n", encoding="utf-8")
 
 
 def load():
@@ -114,13 +120,16 @@ for name, msg, want in CASES:
 
 
 def run(msg, env=None, **extra):
-    payload = dict(last_assistant_message=msg, **extra)
+    payload = {"last_assistant_message": msg, "session_id": "sid-wrap", **extra}
     return subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), capture_output=True, text=True,
                           env={**os.environ, **(env or {})})
 
 
 r = run(CASES[1][1])
 check("e2e block", '"decision": "block"' in r.stdout)
+check("e2e auto blocks too", '"decision": "block"' in run(CASES[1][1], session_id="sid-auto").stdout)
+for sid in ("sid-none", "sid-garbage", "sid-missing", "../sid-wrap", ""):
+    check("e2e quiet without wrap or auto (%s)" % (sid or "no id"), run(CASES[1][1], session_id=sid).stdout.strip() == "")
 check("e2e zh reason has no personal name", ("Dus" + "tin") not in r.stdout and "使用者" in r.stdout)
 r = run(CASES[12][1])
 check("e2e en reason is English", "Items in the decisions section have no label" in json.loads(r.stdout or "{}").get("reason", ""))

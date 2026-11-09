@@ -15,6 +15,8 @@ Labels and the heading can be customised in the work-mode config file
 (${WORK_MODE_CONFIG:-~/.config/work-mode/config.json}: converge.decisionLabels,
 converge.tradeoffLabel, converge.sectionHeading). Without one, both label sets are accepted.
 
+Only checks while /work-mode wrap or auto is on for the session (the work-mode plugin writes
+${TEMPO_STATE_DIR:-~/.claude/state/tempo}/<session_id>); in a normal session it stays quiet.
 Fail-open on parse problems; the second pass (stop_hook_active) always passes.
 """
 import json
@@ -24,7 +26,9 @@ import sys
 
 DEFAULT_LABELS = ["對外", "金流", "刪除", "權限", "取捨", "outbound", "payment", "delete", "permission", "tradeoff"]
 DEFAULT_TRADEOFF = ["取捨", "tradeoff"]
-HEADINGS = r"待你決定|要你決定|需要你決定|待決事項|Decisions?\s+Needed|Pending\s+Decisions?|Needs?\s+Your\s+Decision"
+# work-mode's internal names for wrap and auto, as written to the session state file
+GUARDED_MODES = ("converge", "autonomous")
+HEADINGS =r"待你決定|要你決定|需要你決定|待決事項|Decisions?\s+Needed|Pending\s+Decisions?|Needs?\s+Your\s+Decision"
 
 
 def load_config():
@@ -199,12 +203,28 @@ def reason(msg: str, bad: list, weak: list) -> str:
     return "DECISION-LABEL GUARD：" + "\n".join(parts)
 
 
+def guarded(sid) -> bool:
+    """True while wrap or auto is on for this session. A missing, unreadable or malformed
+    state file counts as off, like the PreToolUse gates' tempo-auto.sh."""
+    if not isinstance(sid, str) or not sid or "/" in sid or ".." in sid:
+        return False
+    folder = os.environ.get("TEMPO_STATE_DIR") or os.path.expanduser("~/.claude/state/tempo")
+    try:
+        with open(os.path.join(folder, sid), encoding="utf-8") as f:
+            modes = json.load(f).get("modes")
+    except (OSError, ValueError, AttributeError):
+        return False
+    return isinstance(modes, list) and any(m in modes for m in GUARDED_MODES)
+
+
 def main():
     try:
         data = json.load(sys.stdin)
     except ValueError:
         return
     if not isinstance(data, dict) or data.get("stop_hook_active"):
+        return
+    if not guarded(data.get("session_id")):
         return
     msg = data.get("last_assistant_message") or ""
     if not isinstance(msg, str) or not msg:
